@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
-import { Shield, Menu, X } from "lucide-react";
+import { Shield, Menu, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, signOut } = useAuth();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -19,12 +21,25 @@ const Navbar = () => {
 
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-6">
-          <Link to="/how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How it Works</Link>
-          <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
-          <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign In</Link>
-          <Button variant="hero" size="sm" asChild>
-            <Link to="/auth?mode=signup">Get Started</Link>
-          </Button>
+          {user ? (
+            <>
+              <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Dashboard</Link>
+              <Link to="/create" className="text-sm text-muted-foreground hover:text-foreground transition-colors">New Receipt</Link>
+              <Link to="/settings" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Settings</Link>
+              <Button variant="ghost" size="sm" onClick={() => signOut()}>
+                <LogOut className="w-4 h-4" /> Sign Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link to="/#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How it Works</Link>
+              <Link to="/#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
+              <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign In</Link>
+              <Button variant="hero" size="sm" asChild>
+                <Link to="/auth?mode=signup">Get Started</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -42,12 +57,23 @@ const Navbar = () => {
             className="md:hidden overflow-hidden bg-background border-b border-border"
           >
             <div className="flex flex-col gap-3 p-4">
-              <Link to="/how-it-works" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>How it Works</Link>
-              <Link to="/pricing" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>Pricing</Link>
-              <Link to="/auth" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>Sign In</Link>
-              <Button variant="hero" asChild>
-                <Link to="/auth?mode=signup" onClick={() => setMobileOpen(false)}>Get Started</Link>
-              </Button>
+              {user ? (
+                <>
+                  <Link to="/dashboard" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>Dashboard</Link>
+                  <Link to="/create" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>New Receipt</Link>
+                  <Link to="/settings" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>Settings</Link>
+                  <Button variant="outline" onClick={() => { signOut(); setMobileOpen(false); }}>
+                    <LogOut className="w-4 h-4" /> Sign Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link to="/auth" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>Sign In</Link>
+                  <Button variant="hero" asChild>
+                    <Link to="/auth?mode=signup" onClick={() => setMobileOpen(false)}>Get Started</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </motion.div>
         )}
