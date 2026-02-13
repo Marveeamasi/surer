@@ -6,7 +6,6 @@ import { motion } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/supabase";
-import { toast } from "sonner";
 
 const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
   pending: { label: "Pending", icon: Clock, className: "bg-warning/10 text-warning" },
@@ -42,9 +41,7 @@ const Dashboard = () => {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) {
-        toast.error("Failed to load receipts");
-      } else {
+      if (!error) {
         setReceipts((data as any) || []);
       }
       setLoading(false);
@@ -64,10 +61,6 @@ const Dashboard = () => {
     { active: 0, pending: 0, completed: 0, disputes: 0 }
   );
 
-  const handleSignOut = async () => {
-    await signOut();
-  };
-
   return (
     <AppLayout showBottomNav>
       <div className="pt-24 pb-16 px-4">
@@ -82,7 +75,7 @@ const Dashboard = () => {
               <Button variant="hero" size="sm" asChild>
                 <Link to="/create"><Plus className="w-4 h-4" /> New</Link>
               </Button>
-              <Button variant="ghost" size="icon" onClick={handleSignOut}>
+              <Button variant="ghost" size="icon" onClick={() => signOut()}>
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>
@@ -122,7 +115,8 @@ const Dashboard = () => {
               <div className="w-16 h-16 mx-auto rounded-2xl bg-secondary flex items-center justify-center">
                 <FileText className="w-8 h-8 text-muted-foreground" />
               </div>
-              <p className="text-muted-foreground">No receipts yet</p>
+              <h3 className="font-display text-lg font-semibold text-foreground">No receipts yet</h3>
+              <p className="text-sm text-muted-foreground">Create your first secure payment to get started.</p>
               <Button variant="hero" asChild>
                 <Link to="/create">Create your first receipt</Link>
               </Button>

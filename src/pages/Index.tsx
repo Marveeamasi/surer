@@ -65,7 +65,7 @@ const Index = () => {
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button variant="hero" size="xl" asChild>
-                  <Link to="/auth?mode=signup">
+                  <Link to="/auth">
                     Start for Free <ArrowRight className="w-5 h-5" />
                   </Link>
                 </Button>
@@ -210,7 +210,7 @@ const Index = () => {
               Join thousands of Nigerians who pay safely with Surer. It takes less than a minute.
             </p>
             <Button variant="hero" size="xl" asChild>
-              <Link to="/auth?mode=signup">
+              <Link to="/auth">
                 Create Your Account <ArrowRight className="w-5 h-5" />
               </Link>
             </Button>

@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Shield, ArrowLeft, Eye, EyeOff, CheckCircle } from "lucide-react";
+import { Shield, ArrowLeft, Eye, EyeOff, CheckCircle, KeyRound, Loader2 } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-type AuthStep = "email" | "pin" | "create-pin" | "confirm-pin" | "verify-email";
+type AuthStep = "email" | "pin" | "create-pin" | "confirm-pin" | "verify-email" | "reset-pin" | "new-pin" | "confirm-new-pin";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
-  const isSignup = searchParams.get("mode") === "signup";
   const navigate = useNavigate();
   const { signIn, signUp } = useAuth();
 
@@ -22,14 +22,33 @@ const Auth = () => {
   const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // For simplicity, route to create or login based on URL param
-    if (isSignup) {
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("check-email", {
+        body: { email },
+      });
+
+      if (error) {
+        toast.error("Something went wrong. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      if (data.exists && data.verified) {
+        setStep("pin");
+      } else if (data.exists && !data.verified) {
+        setStep("verify-email");
+      } else {
+        setStep("create-pin");
+      }
+    } catch {
+      // Fallback: try sign in first, if fails go to create
       setStep("create-pin");
-    } else {
-      setStep("pin");
     }
+    setLoading(false);
   };
 
   const handlePinSubmit = async (e: React.FormEvent) => {
@@ -38,9 +57,10 @@ const Auth = () => {
     const { error } = await signIn(email, pin);
     setLoading(false);
     if (error) {
-      toast.error(error.message || "Invalid email or PIN");
+      toast.error(error.message || "Invalid PIN. Please try again.");
     } else {
-      navigate("/dashboard");
+      const redirect = searchParams.get("redirect");
+      navigate(redirect || "/dashboard");
     }
   };
 
@@ -63,6 +83,96 @@ const Auth = () => {
     }
   };
 
+  const handleResetPin = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.functions.invoke("reset-pin", {
+        body: { email },
+      });
+      if (error) {
+        toast.error("Failed to send reset link");
+      } else {
+        toast.success("Reset link sent to your email!");
+        setStep("reset-pin");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setLoading(false);
+  };
+
+  const handleNewPinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pin.length !== 6) return;
+    setStep("confirm-new-pin");
+  };
+
+  const handleConfirmNewPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (confirmPin !== pin) return;
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: pin });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message || "Failed to update PIN");
+    } else {
+      toast.success("PIN updated! You can now sign in.");
+      setPin("");
+      setConfirmPin("");
+      setStep("pin");
+    }
+  };
+
+  const resetState = () => {
+    setPin("");
+    setConfirmPin("");
+    setShowPin(false);
+  };
+
+  const stepTitles: Record<AuthStep, { title: string; subtitle: string }> = {
+    email: { title: "Welcome to Surer", subtitle: "Enter your email to get started" },
+    pin: { title: "Enter your PIN", subtitle: "Enter your 6-digit PIN to sign in" },
+    "create-pin": { title: "Create your PIN", subtitle: "Choose a 6-digit PIN as your password" },
+    "confirm-pin": { title: "Confirm your PIN", subtitle: "Enter the same PIN again to confirm" },
+    "verify-email": { title: "Verify your email", subtitle: `We sent a verification link to ${email}` },
+    "reset-pin": { title: "Check your email", subtitle: `We sent a PIN reset link to ${email}` },
+    "new-pin": { title: "Set new PIN", subtitle: "Choose a new 6-digit PIN" },
+    "confirm-new-pin": { title: "Confirm new PIN", subtitle: "Enter the same PIN again" },
+  };
+
+  const PinInput = ({ value, onChange, onSubmit, buttonText, disabled }: {
+    value: string;
+    onChange: (v: string) => void;
+    onSubmit: (e: React.FormEvent) => void;
+    buttonText: string;
+    disabled?: boolean;
+  }) => (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="relative">
+        <Input
+          type={showPin ? "text" : "password"}
+          placeholder="••••••"
+          maxLength={6}
+          value={value}
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))}
+          required
+          autoFocus
+          className="h-14 text-center text-2xl tracking-[0.5em] font-mono"
+        />
+        <button
+          type="button"
+          onClick={() => setShowPin(!showPin)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+        </button>
+      </div>
+      <Button variant="hero" size="lg" className="w-full" disabled={value.length !== 6 || loading || disabled}>
+        {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Please wait...</> : buttonText}
+      </Button>
+    </form>
+  );
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <motion.div
@@ -79,140 +189,147 @@ const Auth = () => {
             <span className="font-display text-2xl font-bold text-foreground">Surer</span>
           </Link>
           <h1 className="font-display text-2xl font-bold text-foreground">
-            {step === "email" && "Welcome"}
-            {step === "pin" && "Enter your PIN"}
-            {step === "create-pin" && "Create your PIN"}
-            {step === "confirm-pin" && "Confirm your PIN"}
-            {step === "verify-email" && "Check your email"}
+            {stepTitles[step].title}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {step === "email" && "Enter your email to get started"}
-            {step === "pin" && "Enter your 6-digit PIN to sign in"}
-            {step === "create-pin" && "Choose a 6-digit PIN as your password"}
-            {step === "confirm-pin" && "Enter the same PIN again to confirm"}
-            {step === "verify-email" && `We sent a verification link to ${email}`}
+            {stepTitles[step].subtitle}
           </p>
         </div>
 
-        {/* Verify email success */}
-        {step === "verify-email" && (
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-full bg-accent/10 flex items-center justify-center">
-              <CheckCircle className="w-8 h-8 text-accent" />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Click the link in your email to verify your account, then come back to sign in.
-            </p>
-            <Button variant="hero" size="lg" className="w-full" onClick={() => { setStep("email"); setPin(""); setConfirmPin(""); }}>
-              Back to Sign In
-            </Button>
-          </motion.div>
-        )}
-
-        {/* Email step */}
-        {step === "email" && (
-          <form onSubmit={handleEmailSubmit} className="space-y-4">
-            <Input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="h-12 text-base"
-            />
-            <Button variant="hero" size="lg" className="w-full" disabled={loading}>
-              Continue
-            </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              {isSignup ? (
-                <>Already have an account? <Link to="/auth" className="text-primary hover:underline">Sign in</Link></>
-              ) : (
-                <>New here? <Link to="/auth?mode=signup" className="text-primary hover:underline">Create account</Link></>
-              )}
-            </p>
-          </form>
-        )}
-
-        {/* PIN login */}
-        {step === "pin" && (
-          <form onSubmit={handlePinSubmit} className="space-y-4">
-            <div className="relative">
-              <Input
-                type={showPin ? "text" : "password"}
-                placeholder="••••••"
-                maxLength={6}
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                required
-                className="h-12 text-center text-2xl tracking-[0.5em] font-mono"
-              />
-              <button type="button" onClick={() => setShowPin(!showPin)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-            <Button variant="hero" size="lg" className="w-full" disabled={pin.length !== 6 || loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-        )}
-
-        {/* Create PIN */}
-        {step === "create-pin" && (
-          <form onSubmit={handleCreatePin} className="space-y-4">
-            <div className="relative">
-              <Input
-                type={showPin ? "text" : "password"}
-                placeholder="••••••"
-                maxLength={6}
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                required
-                className="h-12 text-center text-2xl tracking-[0.5em] font-mono"
-              />
-              <button type="button" onClick={() => setShowPin(!showPin)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-            <Button variant="hero" size="lg" className="w-full" disabled={pin.length !== 6}>
-              Continue
-            </Button>
-          </form>
-        )}
-
-        {/* Confirm PIN */}
-        {step === "confirm-pin" && (
-          <form onSubmit={handleConfirmPin} className="space-y-4">
-            <div className="relative">
-              <Input
-                type={showPin ? "text" : "password"}
-                placeholder="••••••"
-                maxLength={6}
-                value={confirmPin}
-                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
-                required
-                className="h-12 text-center text-2xl tracking-[0.5em] font-mono"
-              />
-              <button type="button" onClick={() => setShowPin(!showPin)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-            {confirmPin.length === 6 && confirmPin !== pin && (
-              <p className="text-sm text-destructive">PINs don't match</p>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+          >
+            {/* Verify email */}
+            {step === "verify-email" && (
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 mx-auto rounded-full bg-accent/10 flex items-center justify-center">
+                  <CheckCircle className="w-8 h-8 text-accent" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Click the link in your email to verify your account, then come back to sign in.
+                </p>
+                <Button variant="hero" size="lg" className="w-full" onClick={() => { resetState(); setStep("email"); }}>
+                  Back to Sign In
+                </Button>
+              </div>
             )}
-            <Button variant="hero" size="lg" className="w-full" disabled={confirmPin.length !== 6 || confirmPin !== pin || loading}>
-              {loading ? "Creating account..." : "Create Account"}
-            </Button>
-          </form>
-        )}
 
-        {/* Back */}
-        {step !== "email" && step !== "verify-email" && (
+            {/* Reset PIN sent */}
+            {step === "reset-pin" && (
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                  <KeyRound className="w-8 h-8 text-primary" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Click the link in your email to reset your PIN. After clicking the link, you'll be able to set a new PIN.
+                </p>
+                <Button variant="hero" size="lg" className="w-full" onClick={() => { resetState(); setStep("email"); }}>
+                  Back to Sign In
+                </Button>
+              </div>
+            )}
+
+            {/* Email step */}
+            {step === "email" && (
+              <form onSubmit={handleEmailSubmit} className="space-y-4">
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                  className="h-14 text-base"
+                />
+                <Button variant="hero" size="lg" className="w-full" disabled={loading}>
+                  {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Checking...</> : "Continue"}
+                </Button>
+              </form>
+            )}
+
+            {/* PIN login */}
+            {step === "pin" && (
+              <div className="space-y-4">
+                <PinInput
+                  value={pin}
+                  onChange={setPin}
+                  onSubmit={handlePinSubmit}
+                  buttonText="Sign In"
+                />
+                <button
+                  type="button"
+                  onClick={handleResetPin}
+                  className="block mx-auto text-sm text-primary hover:underline"
+                  disabled={loading}
+                >
+                  <KeyRound className="w-3.5 h-3.5 inline mr-1" />
+                  Change PIN
+                </button>
+              </div>
+            )}
+
+            {/* Create PIN */}
+            {step === "create-pin" && (
+              <PinInput value={pin} onChange={setPin} onSubmit={handleCreatePin} buttonText="Continue" />
+            )}
+
+            {/* Confirm PIN */}
+            {step === "confirm-pin" && (
+              <div className="space-y-3">
+                <PinInput
+                  value={confirmPin}
+                  onChange={setConfirmPin}
+                  onSubmit={handleConfirmPin}
+                  buttonText="Create Account"
+                  disabled={confirmPin.length === 6 && confirmPin !== pin}
+                />
+                {confirmPin.length === 6 && confirmPin !== pin && (
+                  <p className="text-sm text-destructive text-center">PINs don't match</p>
+                )}
+              </div>
+            )}
+
+            {/* New PIN (after reset) */}
+            {step === "new-pin" && (
+              <PinInput value={pin} onChange={setPin} onSubmit={handleNewPinSubmit} buttonText="Continue" />
+            )}
+
+            {/* Confirm new PIN */}
+            {step === "confirm-new-pin" && (
+              <div className="space-y-3">
+                <PinInput
+                  value={confirmPin}
+                  onChange={setConfirmPin}
+                  onSubmit={handleConfirmNewPin}
+                  buttonText="Update PIN"
+                  disabled={confirmPin.length === 6 && confirmPin !== pin}
+                />
+                {confirmPin.length === 6 && confirmPin !== pin && (
+                  <p className="text-sm text-destructive text-center">PINs don't match</p>
+                )}
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Back button */}
+        {step !== "email" && step !== "verify-email" && step !== "reset-pin" && (
           <button
             onClick={() => {
-              if (step === "confirm-pin") setStep("create-pin");
-              else { setStep("email"); setPin(""); }
+              if (step === "confirm-pin" || step === "confirm-new-pin") {
+                setConfirmPin("");
+                setStep(step === "confirm-pin" ? "create-pin" : "new-pin");
+              } else {
+                resetState();
+                setStep("email");
+              }
             }}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mx-auto"
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mx-auto transition-colors"
           >
             <ArrowLeft className="w-4 h-4" /> Go back
           </button>

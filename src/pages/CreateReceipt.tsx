@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FeeCalculator, calculateFees } from "@/components/FeeCalculator";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
@@ -14,15 +14,22 @@ import { toast } from "sonner";
 
 const CreateReceipt = () => {
   const [searchParams] = useSearchParams();
-  const isReceiver = searchParams.get("user") === "receiver";
+  const isReceiverParam = searchParams.get("user") === "receiver";
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [receiverEmail, setReceiverEmail] = useState("");
+  const [counterpartyEmail, setCounterpartyEmail] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [iAmReceiver, setIAmReceiver] = useState(isReceiver);
+  const [iAmReceiver, setIAmReceiver] = useState(isReceiverParam);
   const [loading, setLoading] = useState(false);
+
+  // When "I am receiving money" is toggled on, auto-fill with logged-in user's email
+  useEffect(() => {
+    if (isReceiverParam) {
+      setIAmReceiver(true);
+    }
+  }, [isReceiverParam]);
 
   const numericAmount = parseFloat(amount) || 0;
 
@@ -30,12 +37,15 @@ const CreateReceipt = () => {
     e.preventDefault();
     if (!user) return;
 
+    if (numericAmount < 1000) {
+      toast.error("Minimum amount is ₦1,000");
+      return;
+    }
+
     setLoading(true);
     const fees = calculateFees(numericAmount);
 
     const receiptData: any = {
-      sender_id: iAmReceiver ? undefined : user.id,
-      receiver_email: iAmReceiver ? user.email! : receiverEmail,
       amount: numericAmount,
       description,
       created_by: user.id,
@@ -45,11 +55,14 @@ const CreateReceipt = () => {
     };
 
     if (iAmReceiver) {
+      // I am the receiver, so the counterparty email is the sender's email
       receiptData.receiver_id = user.id;
-      receiptData.sender_id = user.id; // Placeholder, will be updated when sender pays
-      receiptData.receiver_email = receiverEmail; // This is actually the sender's email in this case
+      receiptData.receiver_email = user.email;
+      receiptData.sender_id = user.id; // Placeholder until sender pays
     } else {
+      // I am the sender
       receiptData.sender_id = user.id;
+      receiptData.receiver_email = counterpartyEmail;
     }
 
     const { error } = await db.from("receipts").insert(receiptData);
@@ -77,25 +90,57 @@ const CreateReceipt = () => {
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="flex items-center gap-3 bg-secondary rounded-xl p-4">
-                <Checkbox id="receiver" checked={iAmReceiver} onCheckedChange={(c) => setIAmReceiver(!!c)} />
+                <Checkbox
+                  id="receiver"
+                  checked={iAmReceiver}
+                  onCheckedChange={(c) => {
+                    setIAmReceiver(!!c);
+                    if (c) setCounterpartyEmail("");
+                  }}
+                />
                 <label htmlFor="receiver" className="text-sm font-medium text-foreground cursor-pointer">
                   I am receiving money
                 </label>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">
-                  {iAmReceiver ? "Sender's Email" : "Receiver's Email"}
-                </label>
-                <Input
-                  type="email"
-                  placeholder="them@example.com"
-                  value={receiverEmail}
-                  onChange={(e) => setReceiverEmail(e.target.value)}
-                  required
-                  className="h-12"
-                />
-              </div>
+              {iAmReceiver ? (
+                <>
+                  {/* Show my email as receiver (read-only) */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">My Email (Receiver)</label>
+                    <Input
+                      type="email"
+                      value={user?.email || ""}
+                      readOnly
+                      className="h-12 bg-muted cursor-not-allowed"
+                    />
+                  </div>
+                  {/* Sender's email */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Sender's Email</label>
+                    <Input
+                      type="email"
+                      placeholder="sender@example.com"
+                      value={counterpartyEmail}
+                      onChange={(e) => setCounterpartyEmail(e.target.value)}
+                      required
+                      className="h-12"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Receiver's Email</label>
+                  <Input
+                    type="email"
+                    placeholder="receiver@example.com"
+                    value={counterpartyEmail}
+                    onChange={(e) => setCounterpartyEmail(e.target.value)}
+                    required
+                    className="h-12"
+                  />
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Amount (₦)</label>
@@ -124,7 +169,7 @@ const CreateReceipt = () => {
               </div>
 
               <Button variant="hero" size="lg" className="w-full" disabled={loading}>
-                {loading ? "Creating..." : "Create Receipt"} <ArrowRight className="w-5 h-5" />
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</> : <>Create Receipt <ArrowRight className="w-5 h-5" /></>}
               </Button>
             </form>
           </motion.div>
