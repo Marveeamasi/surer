@@ -1,13 +1,15 @@
 import { Link } from "react-router-dom";
-import { Shield, Menu, X, LogOut } from "lucide-react";
+import { Shield, Menu, X, LogOut, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -26,6 +28,9 @@ const Navbar = () => {
               <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Dashboard</Link>
               <Link to="/create" className="text-sm text-muted-foreground hover:text-foreground transition-colors">New Receipt</Link>
               <Link to="/settings" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Settings</Link>
+              <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => signOut()}>
                 <LogOut className="w-4 h-4" /> Sign Out
               </Button>
@@ -34,9 +39,12 @@ const Navbar = () => {
             <>
               <Link to="/#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How it Works</Link>
               <Link to="/#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
+              <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </Button>
               <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign In</Link>
               <Button variant="hero" size="sm" asChild>
-                <Link to="/auth?mode=signup">Get Started</Link>
+                <Link to="/auth">Get Started</Link>
               </Button>
             </>
           )}

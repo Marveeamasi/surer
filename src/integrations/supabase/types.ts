@@ -14,7 +14,287 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admin_decisions: {
+        Row: {
+          created_at: string | null
+          decided_by: string
+          decision: string
+          dispute_id: string
+          id: string
+          release_amount: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          decided_by: string
+          decision: string
+          dispute_id: string
+          id?: string
+          release_amount?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          decided_by?: string
+          decision?: string
+          dispute_id?: string
+          id?: string
+          release_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_decisions_dispute_id_fkey"
+            columns: ["dispute_id"]
+            isOneToOne: false
+            referencedRelation: "disputes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      disputes: {
+        Row: {
+          auto_execute_at: string | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          initiated_by: string
+          proposed_action: string
+          proposed_amount: number | null
+          reason: string
+          receipt_id: string
+          resolved_at: string | null
+          status: string
+        }
+        Insert: {
+          auto_execute_at?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          initiated_by: string
+          proposed_action: string
+          proposed_amount?: number | null
+          reason: string
+          receipt_id: string
+          resolved_at?: string | null
+          status?: string
+        }
+        Update: {
+          auto_execute_at?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          initiated_by?: string
+          proposed_action?: string
+          proposed_amount?: number | null
+          reason?: string
+          receipt_id?: string
+          resolved_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disputes_receipt_id_fkey"
+            columns: ["receipt_id"]
+            isOneToOne: false
+            referencedRelation: "receipts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      evidence: {
+        Row: {
+          created_at: string | null
+          dispute_id: string
+          file_path: string
+          id: string
+          type: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string | null
+          dispute_id: string
+          file_path: string
+          id?: string
+          type?: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string | null
+          dispute_id?: string
+          file_path?: string
+          id?: string
+          type?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evidence_dispute_id_fkey"
+            columns: ["dispute_id"]
+            isOneToOne: false
+            referencedRelation: "disputes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          account_name: string | null
+          account_number: string | null
+          bank_name: string | null
+          created_at: string | null
+          display_name: string | null
+          email: string | null
+          fingerprint_enabled: boolean | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          account_name?: string | null
+          account_number?: string | null
+          bank_name?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          email?: string | null
+          fingerprint_enabled?: boolean | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          account_name?: string | null
+          account_number?: string | null
+          bank_name?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          email?: string | null
+          fingerprint_enabled?: boolean | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      receipts: {
+        Row: {
+          amount: number
+          amount_paid: number | null
+          created_at: string | null
+          created_by: string
+          description: string
+          escrow_code: string | null
+          id: string
+          paid_at: string | null
+          payscrow_fee: number | null
+          payscrow_transaction_number: string | null
+          payscrow_transaction_ref: string | null
+          receiver_email: string
+          receiver_id: string | null
+          sender_id: string
+          status: string
+          surer_fee: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          amount_paid?: number | null
+          created_at?: string | null
+          created_by: string
+          description: string
+          escrow_code?: string | null
+          id?: string
+          paid_at?: string | null
+          payscrow_fee?: number | null
+          payscrow_transaction_number?: string | null
+          payscrow_transaction_ref?: string | null
+          receiver_email: string
+          receiver_id?: string | null
+          sender_id: string
+          status?: string
+          surer_fee?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          amount_paid?: number | null
+          created_at?: string | null
+          created_by?: string
+          description?: string
+          escrow_code?: string | null
+          id?: string
+          paid_at?: string | null
+          payscrow_fee?: number | null
+          payscrow_transaction_number?: string | null
+          payscrow_transaction_ref?: string | null
+          receiver_email?: string
+          receiver_id?: string | null
+          sender_id?: string
+          status?: string
+          surer_fee?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      withdrawals: {
+        Row: {
+          account_name: string
+          account_number: string
+          amount: number
+          bank_name: string
+          created_at: string | null
+          id: string
+          receipt_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          account_name: string
+          account_number: string
+          amount: number
+          bank_name: string
+          created_at?: string | null
+          id?: string
+          receipt_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          account_name?: string
+          account_number?: string
+          amount?: number
+          bank_name?: string
+          created_at?: string | null
+          id?: string
+          receipt_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "withdrawals_receipt_id_fkey"
+            columns: ["receipt_id"]
+            isOneToOne: false
+            referencedRelation: "receipts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
