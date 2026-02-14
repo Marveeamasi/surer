@@ -176,6 +176,7 @@ export type Database = {
           amount_paid: number | null
           created_at: string | null
           created_by: string
+          decision_auto_execute_at: string | null
           description: string
           escrow_code: string | null
           id: string
@@ -183,8 +184,13 @@ export type Database = {
           payscrow_fee: number | null
           payscrow_transaction_number: string | null
           payscrow_transaction_ref: string | null
+          receiver_decision: string | null
+          receiver_decision_reason: string | null
           receiver_email: string
           receiver_id: string | null
+          sender_decision: string | null
+          sender_decision_amount: number | null
+          sender_decision_reason: string | null
           sender_id: string
           status: string
           surer_fee: number | null
@@ -195,6 +201,7 @@ export type Database = {
           amount_paid?: number | null
           created_at?: string | null
           created_by: string
+          decision_auto_execute_at?: string | null
           description: string
           escrow_code?: string | null
           id?: string
@@ -202,8 +209,13 @@ export type Database = {
           payscrow_fee?: number | null
           payscrow_transaction_number?: string | null
           payscrow_transaction_ref?: string | null
+          receiver_decision?: string | null
+          receiver_decision_reason?: string | null
           receiver_email: string
           receiver_id?: string | null
+          sender_decision?: string | null
+          sender_decision_amount?: number | null
+          sender_decision_reason?: string | null
           sender_id: string
           status?: string
           surer_fee?: number | null
@@ -214,6 +226,7 @@ export type Database = {
           amount_paid?: number | null
           created_at?: string | null
           created_by?: string
+          decision_auto_execute_at?: string | null
           description?: string
           escrow_code?: string | null
           id?: string
@@ -221,8 +234,13 @@ export type Database = {
           payscrow_fee?: number | null
           payscrow_transaction_number?: string | null
           payscrow_transaction_ref?: string | null
+          receiver_decision?: string | null
+          receiver_decision_reason?: string | null
           receiver_email?: string
           receiver_id?: string | null
+          sender_decision?: string | null
+          sender_decision_amount?: number | null
+          sender_decision_reason?: string | null
           sender_id?: string
           status?: string
           surer_fee?: number | null

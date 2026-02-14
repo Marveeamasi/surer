@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { type, receiptId } = await req.json();
+    const { type, receiptId, decision, reason, decidedBy } = await req.json();
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -49,6 +49,15 @@ Deno.serve(async (req) => {
     const formatNaira = (amt: number) =>
       new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 0 }).format(amt);
 
+    const decisionLabels: Record<string, string> = {
+      release_all: "Release Full Payment",
+      release_specific: "Release Specific Amount",
+      refund: "Full Refund",
+      delivered: "Marked as Delivered",
+      accept: "Accepted the proposal",
+      reject: "Rejected the proposal",
+    };
+
     const templates: Record<string, { subject: string; to: string[]; html: string }> = {
       receipt_created: {
         subject: `New Receipt: ${receipt.description}`,
@@ -67,7 +76,18 @@ Deno.serve(async (req) => {
         html: `
           <h2>Payment Confirmed! 🎉</h2>
           <p>The payment of ${formatNaira(receipt.amount)} for "${receipt.description}" has been confirmed and is now held safely in escrow.</p>
-          <p>The sender can release the funds once satisfied.</p>
+          <p>Both parties can now make decisions on the receipt.</p>
+        `,
+      },
+      decision_made: {
+        subject: `Decision Update: ${receipt.description}`,
+        to: decidedBy === "sender" ? [receiverEmail] : [senderEmail],
+        html: `
+          <h2>A decision has been made on your receipt</h2>
+          <p><strong>Receipt:</strong> ${receipt.description} (${formatNaira(receipt.amount)})</p>
+          <p><strong>Decision:</strong> ${decisionLabels[decision] || decision}</p>
+          ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
+          <p>Log in to Surer to respond or view the details.</p>
         `,
       },
       dispute_started: {
@@ -76,15 +96,16 @@ Deno.serve(async (req) => {
         html: `
           <h2>A dispute has been raised</h2>
           <p>A dispute has been raised on the receipt "${receipt.description}" (${formatNaira(receipt.amount)}).</p>
+          <p>You have 4 days to resolve this before it escalates to admin.</p>
           <p>Please log in to Surer to respond or provide evidence.</p>
         `,
       },
       dispute_resolved: {
-        subject: `Dispute Resolved: ${receipt.description}`,
+        subject: `Resolved: ${receipt.description}`,
         to: [senderEmail, receiverEmail],
         html: `
-          <h2>Dispute Resolved ✅</h2>
-          <p>The dispute on "${receipt.description}" has been resolved.</p>
+          <h2>Receipt Completed ✅</h2>
+          <p>The receipt "${receipt.description}" has been resolved and completed.</p>
           <p>Log in to Surer to see the outcome.</p>
         `,
       },

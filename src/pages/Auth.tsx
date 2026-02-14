@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Shield, ArrowLeft, Eye, EyeOff, CheckCircle, KeyRound, Loader2 } from "lucide-react";
@@ -13,7 +13,7 @@ type AuthStep = "email" | "pin" | "create-pin" | "confirm-pin" | "verify-email" 
 const Auth = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { signIn, signUp } = useAuth();
+  const { user, signIn, signUp } = useAuth();
 
   const [step, setStep] = useState<AuthStep>("email");
   const [email, setEmail] = useState("");
@@ -21,6 +21,40 @@ const Auth = () => {
   const [confirmPin, setConfirmPin] = useState("");
   const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Handle reset mode from email link - user arrives with a session from the reset link
+  useEffect(() => {
+    const mode = searchParams.get("mode");
+    if (mode === "reset") {
+      // User clicked reset link in email - they have a session now
+      // Extract email from session and go straight to new-pin
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user?.email) {
+          setEmail(session.user.email);
+          setStep("new-pin");
+        } else {
+          // No session yet, wait for auth state change
+          const timeout = setTimeout(() => {
+            supabase.auth.getSession().then(({ data: { session: s } }) => {
+              if (s?.user?.email) {
+                setEmail(s.user.email);
+                setStep("new-pin");
+              }
+            });
+          }, 1500);
+          return () => clearTimeout(timeout);
+        }
+      });
+    }
+  }, [searchParams]);
+
+  // If already logged in and not in reset mode, redirect
+  useEffect(() => {
+    if (user && step !== "new-pin" && step !== "confirm-new-pin") {
+      const redirect = searchParams.get("redirect");
+      navigate(redirect || "/dashboard");
+    }
+  }, [user, step]);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +79,6 @@ const Auth = () => {
         setStep("create-pin");
       }
     } catch {
-      // Fallback: try sign in first, if fails go to create
       setStep("create-pin");
     }
     setLoading(false);
@@ -116,10 +149,11 @@ const Auth = () => {
     if (error) {
       toast.error(error.message || "Failed to update PIN");
     } else {
-      toast.success("PIN updated! You can now sign in.");
+      toast.success("PIN updated successfully! Signing you in...");
       setPin("");
       setConfirmPin("");
-      setStep("pin");
+      // User is already signed in via the reset link session, redirect
+      navigate("/dashboard");
     }
   };
 
@@ -136,7 +170,7 @@ const Auth = () => {
     "confirm-pin": { title: "Confirm your PIN", subtitle: "Enter the same PIN again to confirm" },
     "verify-email": { title: "Verify your email", subtitle: `We sent a verification link to ${email}` },
     "reset-pin": { title: "Check your email", subtitle: `We sent a PIN reset link to ${email}` },
-    "new-pin": { title: "Set new PIN", subtitle: "Choose a new 6-digit PIN" },
+    "new-pin": { title: "Set new PIN", subtitle: `Setting new PIN for ${email}` },
     "confirm-new-pin": { title: "Confirm new PIN", subtitle: "Enter the same PIN again" },
   };
 
@@ -296,7 +330,12 @@ const Auth = () => {
 
             {/* New PIN (after reset) */}
             {step === "new-pin" && (
-              <PinInput value={pin} onChange={setPin} onSubmit={handleNewPinSubmit} buttonText="Continue" />
+              <div className="space-y-3">
+                <div className="bg-secondary rounded-xl p-3 text-center">
+                  <p className="text-sm text-foreground font-medium">{email}</p>
+                </div>
+                <PinInput value={pin} onChange={setPin} onSubmit={handleNewPinSubmit} buttonText="Continue" />
+              </div>
             )}
 
             {/* Confirm new PIN */}
