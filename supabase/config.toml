@@ -1,1 +1,10 @@
 project_id = "qnuyiztwqbzcbuheznnv"
+
+[functions.payscrow-release]
+verify_jwt = false
+
+[functions.cron-dispute-check]
+verify_jwt = false
+
+[functions.payscrow-webhook]
+verify_jwt = false

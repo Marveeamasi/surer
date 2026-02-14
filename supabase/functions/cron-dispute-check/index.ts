@@ -18,58 +18,96 @@ Deno.serve(async (req) => {
     );
 
     const now = new Date().toISOString();
+    let autoExecuted = 0;
+    let escalated = 0;
 
-    // Find disputes past auto-execute time (2 days) that haven't been responded to
-    const { data: autoExecDisputes } = await supabaseAdmin
-      .from("disputes")
-      .select("*, receipts(*)")
-      .eq("status", "open")
-      .lt("auto_execute_at", now);
-
-    if (autoExecDisputes && autoExecDisputes.length > 0) {
-      for (const dispute of autoExecDisputes) {
-        // Auto-execute the proposed action
-        await supabaseAdmin
-          .from("disputes")
-          .update({ status: "resolved", resolved_at: now })
-          .eq("id", dispute.id);
-
-        await supabaseAdmin
-          .from("receipts")
-          .update({ status: "completed" })
-          .eq("id", dispute.receipt_id);
-
-        console.log(`Auto-executed dispute ${dispute.id} for receipt ${dispute.receipt_id}`);
-      }
-    }
-
-    // Find disputes past 4 days that are still unresolved
-    const { data: expiredDisputes } = await supabaseAdmin
-      .from("disputes")
+    // 1. Auto-execute decisions on ACTIVE receipts past 2-day timer
+    // If only one party made a decision and 2 days passed, execute it
+    const { data: activeReceipts } = await supabaseAdmin
+      .from("receipts")
       .select("*")
-      .in("status", ["open", "pending_response"])
-      .lt("expires_at", now);
+      .eq("status", "active")
+      .not("decision_auto_execute_at", "is", null)
+      .lt("decision_auto_execute_at", now);
 
-    if (expiredDisputes && expiredDisputes.length > 0) {
-      for (const dispute of expiredDisputes) {
-        await supabaseAdmin
-          .from("disputes")
-          .update({ status: "escalated" })
-          .eq("id", dispute.id);
+    if (activeReceipts && activeReceipts.length > 0) {
+      for (const receipt of activeReceipts) {
+        // Auto-execute the existing decision
+        const decision = receipt.sender_decision || receipt.receiver_decision;
+        if (!decision) continue;
 
+        // Mark as completed and invoke release
         await supabaseAdmin
           .from("receipts")
-          .update({ status: "unresolved" })
-          .eq("id", dispute.receipt_id);
+          .update({ status: "completed", decision_auto_execute_at: null })
+          .eq("id", receipt.id);
 
-        console.log(`Escalated dispute ${dispute.id} to admin`);
+        // Call release function
+        try {
+          await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/payscrow-release`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({
+              receiptId: receipt.id,
+              decision: receipt.sender_decision || "release_all",
+              amount: receipt.sender_decision_amount || null,
+            }),
+          });
+        } catch (e) {
+          console.error("Release call failed for receipt:", receipt.id, e);
+        }
+
+        autoExecuted++;
+        console.log(`Auto-executed receipt ${receipt.id}, decision: ${decision}`);
       }
     }
+
+    // 2. Escalate disputes past 4 days to unresolved
+    const { data: disputeReceipts } = await supabaseAdmin
+      .from("receipts")
+      .select("*")
+      .eq("status", "dispute");
+
+    if (disputeReceipts && disputeReceipts.length > 0) {
+      for (const receipt of disputeReceipts) {
+        // Check if there's a dispute with an expired timer (4 days)
+        const { data: disputes } = await supabaseAdmin
+          .from("disputes")
+          .select("*")
+          .eq("receipt_id", receipt.id)
+          .not("expires_at", "is", null)
+          .lt("expires_at", now);
+
+        if (disputes && disputes.length > 0) {
+          await supabaseAdmin
+            .from("receipts")
+            .update({ status: "unresolved" })
+            .eq("id", receipt.id);
+
+          for (const dispute of disputes) {
+            await supabaseAdmin
+              .from("disputes")
+              .update({ status: "escalated" })
+              .eq("id", dispute.id);
+          }
+
+          escalated++;
+          console.log(`Escalated receipt ${receipt.id} to unresolved`);
+        }
+      }
+    }
+
+    // 3. Also check disputes on active receipts that have both decisions but somehow didn't resolve
+    // (edge case cleanup)
 
     return new Response(
       JSON.stringify({
-        autoExecuted: autoExecDisputes?.length || 0,
-        escalated: expiredDisputes?.length || 0,
+        autoExecuted,
+        escalated,
+        checkedAt: now,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

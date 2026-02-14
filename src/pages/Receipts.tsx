@@ -2,11 +2,11 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileText, Search, Clock, CheckCircle, AlertTriangle, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { db } from "@/lib/supabase";
+import { formatNaira } from "@/components/FeeCalculator";
 
 const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
   pending: { label: "Pending", icon: Clock, className: "bg-warning/10 text-warning" },
@@ -15,9 +15,6 @@ const statusConfig: Record<string, { label: string; icon: any; className: string
   unresolved: { label: "Unresolved", icon: AlertTriangle, className: "bg-destructive/10 text-destructive" },
   completed: { label: "Completed", icon: CheckCircle, className: "bg-accent/10 text-accent" },
 };
-
-const formatNaira = (amount: number) =>
-  new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 0 }).format(amount);
 
 const Receipts = () => {
   const { user } = useAuth();
@@ -28,15 +25,29 @@ const Receipts = () => {
 
   useEffect(() => {
     const fetchReceipts = async () => {
-      const { data } = await db
+      if (!user) return;
+
+      const { data: senderReceipts } = await db
         .from("receipts")
         .select("*")
+        .eq("sender_id", user.id)
         .order("created_at", { ascending: false });
-      setReceipts(data || []);
+
+      const { data: receiverReceipts } = await db
+        .from("receipts")
+        .select("*")
+        .eq("receiver_email", user.email!)
+        .order("created_at", { ascending: false });
+
+      const all = [...(senderReceipts || []), ...(receiverReceipts || [])];
+      const unique = Array.from(new Map(all.map((r) => [r.id, r])).values());
+      unique.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setReceipts(unique);
       setLoading(false);
     };
     fetchReceipts();
-  }, []);
+  }, [user]);
 
   const filtered = receipts.filter((r) => {
     const matchesSearch = !search || 
@@ -55,27 +66,18 @@ const Receipts = () => {
           <h1 className="font-display text-2xl font-bold text-foreground mb-2">All Receipts</h1>
           <p className="text-sm text-muted-foreground mb-6">View and search all your transactions</p>
 
-          {/* Search */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search receipts..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-12 pl-10"
-            />
+            <Input placeholder="Search receipts..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-12 pl-10" />
           </div>
 
-          {/* Filters */}
           <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
             {filters.map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 className={`px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  filter === f
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                  filter === f ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                 }`}
               >
                 {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
@@ -107,12 +109,7 @@ const Receipts = () => {
                 const config = statusConfig[receipt.status] || statusConfig.pending;
                 const StatusIcon = config.icon;
                 return (
-                  <motion.div
-                    key={receipt.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                  >
+                  <motion.div key={receipt.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
                     <Link
                       to={`/receipt/${receipt.id}`}
                       className="block bg-card rounded-2xl p-5 shadow-soft hover:shadow-card transition-all border border-border active:scale-[0.98]"

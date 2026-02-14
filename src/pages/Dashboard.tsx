@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/supabase";
+import { formatNaira } from "@/components/FeeCalculator";
 
 const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
   pending: { label: "Pending", icon: Clock, className: "bg-warning/10 text-warning" },
@@ -14,9 +15,6 @@ const statusConfig: Record<string, { label: string; icon: any; className: string
   unresolved: { label: "Unresolved", icon: AlertTriangle, className: "bg-destructive/10 text-destructive" },
   completed: { label: "Completed", icon: CheckCircle, className: "bg-accent/10 text-accent" },
 };
-
-const formatNaira = (amount: number) =>
-  new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 0 }).format(amount);
 
 interface Receipt {
   id: string;
@@ -36,19 +34,32 @@ const Dashboard = () => {
 
   useEffect(() => {
     const fetchReceipts = async () => {
-      const { data, error } = await db
+      if (!user) return;
+
+      // Fetch receipts where user is sender OR receiver (by id or email)
+      const { data: senderReceipts } = await db
         .from("receipts")
         .select("*")
+        .eq("sender_id", user.id)
         .order("created_at", { ascending: false });
 
-      if (!error) {
-        setReceipts((data as any) || []);
-      }
+      const { data: receiverReceipts } = await db
+        .from("receipts")
+        .select("*")
+        .eq("receiver_email", user.email!)
+        .order("created_at", { ascending: false });
+
+      // Merge and deduplicate
+      const all = [...(senderReceipts || []), ...(receiverReceipts || [])];
+      const unique = Array.from(new Map(all.map((r) => [r.id, r])).values());
+      unique.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setReceipts(unique as Receipt[]);
       setLoading(false);
     };
 
     fetchReceipts();
-  }, []);
+  }, [user]);
 
   const statusCounts = receipts.reduce(
     (acc, r) => {
