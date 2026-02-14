@@ -80,7 +80,7 @@ const ReceiptView = () => {
         body: { receiptId: receipt.id },
       });
       if (error || !data?.paymentLink) {
-        toast.error(data?.error || "Failed to initialize payment");
+        toast.error(data?.error || "Failed to initialize payment");  
       } else {
         window.location.href = data.paymentLink;
       }

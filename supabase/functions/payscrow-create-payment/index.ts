@@ -24,11 +24,14 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -40,7 +43,7 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
     // Fetch receipt
@@ -59,10 +62,13 @@ Deno.serve(async (req) => {
 
     // Verify user is the sender
     if (receipt.sender_id !== user.id) {
-      return new Response(JSON.stringify({ error: "Only the sender can pay" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Only the sender can pay" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Get sender and receiver profiles
@@ -73,48 +79,75 @@ Deno.serve(async (req) => {
       .single();
 
     const transactionRef = `SURER-${receipt.id.slice(0, 8)}-${Date.now()}`;
-    const origin = req.headers.get("origin") || "https://surer.lovable.app";
+    const origin = req.headers.get("origin") || "https://surer.com.ng";
 
     // Create Payscrow transaction
     const payscrowApiKey = Deno.env.get("PAYSCROW_BROKER_API_KEY");
     if (!payscrowApiKey) {
-      return new Response(JSON.stringify({ error: "Payscrow not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Payscrow not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    const payscrowResponse = await fetch(`${PAYSCROW_API_BASE}/transactions/start`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "BrokerApiKey": payscrowApiKey,
+    const payscrowResponse = await fetch(
+      `${PAYSCROW_API_BASE}/transactions/start`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          BrokerApiKey: payscrowApiKey,
+        },
+        body: JSON.stringify({
+          transactionReference: transactionRef,
+          merchantEmailAddress: receipt.receiver_email,
+          merchantName: receipt.receiver_email.split("@")[0],
+          customerEmailAddress: user.email,
+          customerName:
+            senderProfile?.display_name || user.email!.split("@")[0],
+          customerPhoneNo: "08093760021",
+          merchantPhoneNo: "08093760021",
+          currencyCode: "NGN",
+          merchantChargePercentage: 0, // Customer pays all Payscrow charges
+          returnUrl: `${origin}/receipt/${receipt.id}`,
+          webhookNotificationUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/payscrow-webhook`,
+          items: [
+            {
+              name: receipt.description,
+              description: receipt.description,
+              quantity: 1,
+              price: receipt.amount + receipt.surer_fee, // Include Surer fee in escrow amount
+            },
+          ],
+        }),
       },
-      body: JSON.stringify({
-        transactionReference: transactionRef,
-        merchantEmailAddress: receipt.receiver_email,
-        merchantName: receipt.receiver_email.split("@")[0],
-        customerEmailAddress: user.email,
-        customerName: senderProfile?.display_name || user.email!.split("@")[0],
-        currencyCode: "NGN",
-        merchantChargePercentage: 0, // Customer pays all Payscrow charges
-        returnUrl: `${origin}/receipt/${receipt.id}`,
-        webhookNotificationUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/payscrow-webhook`,
-        items: [
-          {
-            name: receipt.description,
-            description: receipt.description,
-            quantity: 1,
-            price: receipt.amount + receipt.surer_fee, // Include Surer fee in escrow amount
-          },
-        ],
-      }),
-    });
+    );
 
     const payscrowData = await payscrowResponse.json();
+    console.log("Payscrow response:", payscrowData);
+    console.log(
+      "Payscrow raw response:",
+      JSON.stringify(payscrowData, null, 2),
+    );
 
     if (!payscrowResponse.ok || !payscrowData.success) {
-      const errorMsg = payscrowData.errors?.join(", ") || payscrowData.message || "Payscrow error";
+      let errorMsg = "Payscrow error";
+
+      if (Array.isArray(payscrowData?.errors)) {
+        errorMsg = payscrowData.errors.join(", ");
+      } else if (
+        typeof payscrowData?.errors === "object" &&
+        payscrowData.errors !== null
+      ) {
+        errorMsg = Object.values(payscrowData.errors).flat().join(", ");
+      } else if (typeof payscrowData?.errors === "string") {
+        errorMsg = payscrowData.errors;
+      } else if (payscrowData?.message) {
+        errorMsg = payscrowData.message;
+      }
       return new Response(JSON.stringify({ error: errorMsg }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -136,7 +169,7 @@ Deno.serve(async (req) => {
         totalPayable: payscrowData.data.totalPayable,
         transactionNumber: payscrowData.data.transactionNumber,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error("Error:", err);
