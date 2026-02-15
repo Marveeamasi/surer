@@ -5,6 +5,7 @@ import { LogOut, CreditCard, KeyRound, Mail, Fingerprint, Loader2, Moon, Sun } f
 import { Switch } from "@/components/ui/switch";
 import { motion } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
+import PinVerifyDialog from "@/components/PinVerifyDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/supabase";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,15 +32,23 @@ const Settings = () => {
   const [confirmNewPin, setConfirmNewPin] = useState("");
   const [changingPin, setChangingPin] = useState(false);
 
+  // PIN verify
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [pinTitle, setPinTitle] = useState("");
+  const [pinDesc, setPinDesc] = useState("");
+
+  const requirePin = (title: string, desc: string, action: () => void) => {
+    setPinTitle(title);
+    setPinDesc(desc);
+    setPendingAction(() => action);
+    setPinOpen(true);
+  };
+
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
-      const { data } = await db
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-
+      const { data } = await db.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data) {
         setBankName(data.bank_name || "");
         setAccountNumber(data.account_number || "");
@@ -51,7 +60,7 @@ const Settings = () => {
     fetchProfile();
   }, [user]);
 
-  const handleSave = async () => {
+  const executeSave = async () => {
     if (!user) return;
     setSaving(true);
     const { error } = await db
@@ -68,13 +77,16 @@ const Settings = () => {
     else toast.success("Settings saved!");
   };
 
+  const handleSave = () => {
+    requirePin("Confirm Changes", "Enter your PIN to save your settings.", executeSave);
+  };
+
   const handlePinChange = async () => {
     if (newPin.length !== 6 || confirmNewPin !== newPin) {
       toast.error("PINs don't match or are invalid");
       return;
     }
     setChangingPin(true);
-    // Verify current PIN by signing in
     const { error: verifyError } = await supabase.auth.signInWithPassword({
       email: user!.email!,
       password: currentPin,
@@ -84,7 +96,6 @@ const Settings = () => {
       setChangingPin(false);
       return;
     }
-    // Update to new PIN
     const { error } = await supabase.auth.updateUser({ password: newPin });
     setChangingPin(false);
     if (error) {
@@ -122,10 +133,7 @@ const Settings = () => {
                   <p className="text-xs text-muted-foreground">Switch between light and dark theme</p>
                 </div>
               </div>
-              <Switch
-                checked={theme === "dark"}
-                onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-              />
+              <Switch checked={theme === "dark"} onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")} />
             </div>
 
             {/* Email */}
@@ -146,54 +154,21 @@ const Settings = () => {
                 <KeyRound className="w-4 h-4" />
                 <h2 className="font-display font-semibold">Security PIN</h2>
               </div>
-
               {!showPinChange ? (
                 <Button variant="outline" className="w-full" onClick={() => setShowPinChange(true)}>
                   <KeyRound className="w-4 h-4" /> Change PIN
                 </Button>
               ) : (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  className="space-y-3 bg-card rounded-xl p-4 shadow-soft border border-border"
-                >
-                  <Input
-                    type="password"
-                    placeholder="Current PIN"
-                    maxLength={6}
-                    value={currentPin}
-                    onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
-                    className="h-12 text-center text-lg tracking-[0.3em] font-mono"
-                  />
-                  <Input
-                    type="password"
-                    placeholder="New PIN"
-                    maxLength={6}
-                    value={newPin}
-                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
-                    className="h-12 text-center text-lg tracking-[0.3em] font-mono"
-                  />
-                  <Input
-                    type="password"
-                    placeholder="Confirm New PIN"
-                    maxLength={6}
-                    value={confirmNewPin}
-                    onChange={(e) => setConfirmNewPin(e.target.value.replace(/\D/g, ""))}
-                    className="h-12 text-center text-lg tracking-[0.3em] font-mono"
-                  />
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} className="space-y-3 bg-card rounded-xl p-4 shadow-soft border border-border">
+                  <Input type="password" placeholder="Current PIN" maxLength={6} value={currentPin} onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))} className="h-12 text-center text-lg tracking-[0.3em] font-mono" />
+                  <Input type="password" placeholder="New PIN" maxLength={6} value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))} className="h-12 text-center text-lg tracking-[0.3em] font-mono" />
+                  <Input type="password" placeholder="Confirm New PIN" maxLength={6} value={confirmNewPin} onChange={(e) => setConfirmNewPin(e.target.value.replace(/\D/g, ""))} className="h-12 text-center text-lg tracking-[0.3em] font-mono" />
                   {confirmNewPin.length === 6 && confirmNewPin !== newPin && (
                     <p className="text-sm text-destructive text-center">PINs don't match</p>
                   )}
                   <div className="flex gap-3">
-                    <Button variant="outline" className="flex-1" onClick={() => { setShowPinChange(false); setCurrentPin(""); setNewPin(""); setConfirmNewPin(""); }}>
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="hero"
-                      className="flex-1"
-                      disabled={currentPin.length !== 6 || newPin.length !== 6 || confirmNewPin !== newPin || changingPin}
-                      onClick={handlePinChange}
-                    >
+                    <Button variant="outline" className="flex-1" onClick={() => { setShowPinChange(false); setCurrentPin(""); setNewPin(""); setConfirmNewPin(""); }}>Cancel</Button>
+                    <Button variant="hero" className="flex-1" disabled={currentPin.length !== 6 || newPin.length !== 6 || confirmNewPin !== newPin || changingPin} onClick={handlePinChange}>
                       {changingPin ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</> : "Update PIN"}
                     </Button>
                   </div>
@@ -221,13 +196,7 @@ const Settings = () => {
               </div>
               <div className="space-y-3">
                 <Input placeholder="Bank Name" value={bankName} onChange={(e) => setBankName(e.target.value)} className="h-12" />
-                <Input
-                  placeholder="Account Number"
-                  value={accountNumber}
-                  onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
-                  maxLength={10}
-                  className="h-12"
-                />
+                <Input placeholder="Account Number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))} maxLength={10} className="h-12" />
                 <Input placeholder="Account Name" value={accountName} onChange={(e) => setAccountName(e.target.value)} className="h-12" />
               </div>
             </div>
@@ -244,6 +213,14 @@ const Settings = () => {
           </motion.div>
         </div>
       </div>
+
+      <PinVerifyDialog
+        open={pinOpen}
+        onOpenChange={setPinOpen}
+        onVerified={() => { if (pendingAction) pendingAction(); setPendingAction(null); }}
+        title={pinTitle}
+        description={pinDesc}
+      />
     </AppLayout>
   );
 };

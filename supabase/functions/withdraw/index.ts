@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
 
@@ -40,6 +40,14 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    const paystackKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+    if (!paystackKey) {
+      return new Response(JSON.stringify({ error: "Payment processor not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Get user profile for bank details
     const { data: profile } = await supabaseAdmin
@@ -83,33 +91,124 @@ Deno.serve(async (req) => {
       });
     }
 
+    const withdrawAmount = amount || receipt.amount;
+
+    // Step 1: Create Paystack transfer recipient
+    const recipientResponse = await fetch("https://api.paystack.co/transferrecipient", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${paystackKey}`,
+      },
+      body: JSON.stringify({
+        type: "nuban",
+        name: profile.account_name,
+        account_number: profile.account_number,
+        bank_code: profile.bank_name, // Bank name stored as code for Paystack
+        currency: "NGN",
+      }),
+    });
+
+    const recipientData = await recipientResponse.json();
+
+    if (!recipientData.status) {
+      console.error("Paystack recipient creation failed:", recipientData);
+      
+      // Create withdrawal record as pending for manual processing
+      const { data: withdrawal } = await supabaseAdmin
+        .from("withdrawals")
+        .insert({
+          user_id: user.id,
+          receipt_id: receiptId,
+          amount: withdrawAmount,
+          bank_name: profile.bank_name,
+          account_number: profile.account_number,
+          account_name: profile.account_name,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          withdrawal,
+          message: "Withdrawal queued for manual processing",
+          auto_transfer: false,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const recipientCode = recipientData.data.recipient_code;
+
+    // Step 2: Initiate Paystack transfer
+    const transferResponse = await fetch("https://api.paystack.co/transfer", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${paystackKey}`,
+      },
+      body: JSON.stringify({
+        source: "balance",
+        reason: `Surer withdrawal for receipt ${receiptId.slice(0, 8)}`,
+        amount: Math.round(withdrawAmount * 100), // Paystack uses kobo
+        recipient: recipientCode,
+        reference: `SURER-WD-${receiptId.slice(0, 8)}-${Date.now()}`,
+      }),
+    });
+
+    const transferData = await transferResponse.json();
+    console.log("Paystack transfer response:", JSON.stringify(transferData));
+
+    const transferStatus = transferData.status ? "processing" : "failed";
+
     // Create withdrawal record
     const { data: withdrawal, error: wError } = await supabaseAdmin
       .from("withdrawals")
       .insert({
         user_id: user.id,
         receipt_id: receiptId,
-        amount: amount || receipt.amount,
+        amount: withdrawAmount,
         bank_name: profile.bank_name,
         account_number: profile.account_number,
         account_name: profile.account_name,
-        status: "processing",
+        status: transferStatus,
       })
       .select()
       .single();
 
     if (wError) {
-      return new Response(JSON.stringify({ error: "Failed to create withdrawal" }), {
+      return new Response(JSON.stringify({ error: "Failed to create withdrawal record" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // TODO: Integrate with Paystack Transfer API for actual bank transfer
-    // For now, mark as processing and it would be handled manually or via cron
+    // Send notification email
+    try {
+      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({
+          type: "withdrawal_success",
+          receiptId,
+        }),
+      });
+    } catch (e) {
+      console.error("Failed to send withdrawal notification:", e);
+    }
 
     return new Response(
-      JSON.stringify({ success: true, withdrawal }),
+      JSON.stringify({
+        success: true,
+        withdrawal,
+        auto_transfer: transferData.status,
+        transfer_reference: transferData.data?.reference || null,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

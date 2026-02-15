@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) {
-      return new Response(JSON.stringify({ error: "Resend not configured" }), {
+      return new Response(JSON.stringify({ error: "Email service not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -58,65 +58,98 @@ Deno.serve(async (req) => {
       reject: "Rejected the proposal",
     };
 
+    const baseStyle = `
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 480px; margin: 0 auto; padding: 32px 24px;
+      background: #f8fafb; border-radius: 12px;
+    `;
+    const headerStyle = `color: #1a3a4a; font-size: 22px; font-weight: 700; margin-bottom: 16px;`;
+    const textStyle = `color: #4a6a7a; font-size: 14px; line-height: 1.6;`;
+    const badgeStyle = `display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;`;
+    const btnStyle = `display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #4a8a9a, #3a7a5a); color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;`;
+
     const templates: Record<string, { subject: string; to: string[]; html: string }> = {
       receipt_created: {
-        subject: `New Receipt: ${receipt.description}`,
+        subject: `💳 New Surer Receipt: ${receipt.description}`,
         to: [receiverEmail],
-        html: `
-          <h2>You have a new Surer receipt!</h2>
-          <p><strong>Amount:</strong> ${formatNaira(receipt.amount)}</p>
-          <p><strong>Description:</strong> ${receipt.description}</p>
-          <p><strong>From:</strong> ${senderEmail}</p>
-          <p>Log in to Surer to view and manage this receipt.</p>
-        `,
+        html: `<div style="${baseStyle}">
+          <h2 style="${headerStyle}">New Receipt Created</h2>
+          <p style="${textStyle}"><strong>Amount:</strong> ${formatNaira(receipt.amount)}</p>
+          <p style="${textStyle}"><strong>Description:</strong> ${receipt.description}</p>
+          <p style="${textStyle}"><strong>From:</strong> ${senderEmail}</p>
+          <p style="${textStyle}">Log in to Surer to view and manage this receipt.</p>
+          <p style="text-align: center; margin-top: 24px;">
+            <a href="https://surer.lovable.app/dashboard" style="${btnStyle}">View on Surer</a>
+          </p>
+        </div>`,
       },
       payment_confirmed: {
-        subject: `Payment Confirmed: ${receipt.description}`,
-        to: [senderEmail, receiverEmail],
-        html: `
-          <h2>Payment Confirmed! 🎉</h2>
-          <p>The payment of ${formatNaira(receipt.amount)} for "${receipt.description}" has been confirmed and is now held safely in escrow.</p>
-          <p>Both parties can now make decisions on the receipt.</p>
-        `,
+        subject: `✅ Payment Confirmed: ${receipt.description}`,
+        to: [senderEmail, receiverEmail].filter(Boolean),
+        html: `<div style="${baseStyle}">
+          <h2 style="${headerStyle}">Payment Confirmed! 🎉</h2>
+          <p style="${textStyle}">The payment of ${formatNaira(receipt.amount)} for "${receipt.description}" has been confirmed and is now held safely in escrow.</p>
+          <p style="${textStyle}">Both parties can now make decisions on this receipt.</p>
+          <p style="text-align: center; margin-top: 24px;">
+            <a href="https://surer.lovable.app/receipt/${receipt.id}" style="${btnStyle}">View Receipt</a>
+          </p>
+        </div>`,
       },
       decision_made: {
-        subject: `Decision Update: ${receipt.description}`,
+        subject: `⚡ Decision Update: ${receipt.description}`,
         to: decidedBy === "sender" ? [receiverEmail] : [senderEmail],
-        html: `
-          <h2>A decision has been made on your receipt</h2>
-          <p><strong>Receipt:</strong> ${receipt.description} (${formatNaira(receipt.amount)})</p>
-          <p><strong>Decision:</strong> ${decisionLabels[decision] || decision}</p>
-          ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
-          <p>Log in to Surer to respond or view the details.</p>
-        `,
+        html: `<div style="${baseStyle}">
+          <h2 style="${headerStyle}">A Decision Has Been Made</h2>
+          <p style="${textStyle}"><strong>Receipt:</strong> ${receipt.description} (${formatNaira(receipt.amount)})</p>
+          <p style="${textStyle}"><strong>Decision:</strong> <span style="${badgeStyle} background: #e0f2e9; color: #2a6a4a;">${decisionLabels[decision] || decision}</span></p>
+          ${reason ? `<p style="${textStyle}"><strong>Reason:</strong> "${reason}"</p>` : ""}
+          <p style="${textStyle}">You have 2 days to respond before this decision is auto-executed.</p>
+          <p style="text-align: center; margin-top: 24px;">
+            <a href="https://surer.lovable.app/receipt/${receipt.id}" style="${btnStyle}">Respond Now</a>
+          </p>
+        </div>`,
       },
       dispute_started: {
-        subject: `Dispute Started: ${receipt.description}`,
-        to: [senderEmail, receiverEmail],
-        html: `
-          <h2>A dispute has been raised</h2>
-          <p>A dispute has been raised on the receipt "${receipt.description}" (${formatNaira(receipt.amount)}).</p>
-          <p>You have 4 days to resolve this before it escalates to admin.</p>
-          <p>Please log in to Surer to respond or provide evidence.</p>
-        `,
+        subject: `⚠️ Dispute Raised: ${receipt.description}`,
+        to: [senderEmail, receiverEmail].filter(Boolean),
+        html: `<div style="${baseStyle}">
+          <h2 style="${headerStyle}">Dispute Raised</h2>
+          <p style="${textStyle}">A dispute has been raised on "${receipt.description}" (${formatNaira(receipt.amount)}).</p>
+          <p style="${textStyle}">You have <strong>4 days</strong> to resolve this before it escalates to admin review.</p>
+          <p style="text-align: center; margin-top: 24px;">
+            <a href="https://surer.lovable.app/receipt/${receipt.id}" style="${btnStyle}">View Dispute</a>
+          </p>
+        </div>`,
+      },
+      dispute_escalated: {
+        subject: `🚨 Dispute Escalated: ${receipt.description}`,
+        to: [senderEmail, receiverEmail].filter(Boolean),
+        html: `<div style="${baseStyle}">
+          <h2 style="${headerStyle}">Dispute Escalated to Admin</h2>
+          <p style="${textStyle}">The dispute on "${receipt.description}" (${formatNaira(receipt.amount)}) has been unresolved for 4 days.</p>
+          <p style="${textStyle}">It has been escalated to an admin for a final decision. Both parties can no longer make decisions.</p>
+        </div>`,
       },
       dispute_resolved: {
-        subject: `Resolved: ${receipt.description}`,
-        to: [senderEmail, receiverEmail],
-        html: `
-          <h2>Receipt Completed ✅</h2>
-          <p>The receipt "${receipt.description}" has been resolved and completed.</p>
-          <p>Log in to Surer to see the outcome.</p>
-        `,
+        subject: `✅ Resolved: ${receipt.description}`,
+        to: [senderEmail, receiverEmail].filter(Boolean),
+        html: `<div style="${baseStyle}">
+          <h2 style="${headerStyle}">Receipt Completed ✅</h2>
+          <p style="${textStyle}">The receipt "${receipt.description}" (${formatNaira(receipt.amount)}) has been resolved and completed.</p>
+          <p style="${textStyle}">Funds are being processed according to the final decision.</p>
+          <p style="text-align: center; margin-top: 24px;">
+            <a href="https://surer.lovable.app/receipt/${receipt.id}" style="${btnStyle}">View Outcome</a>
+          </p>
+        </div>`,
       },
       withdrawal_success: {
-        subject: `Withdrawal Successful`,
+        subject: `💰 Withdrawal Processed`,
         to: [receiverEmail],
-        html: `
-          <h2>Withdrawal Successful! 💰</h2>
-          <p>Your withdrawal of ${formatNaira(receipt.amount)} has been processed.</p>
-          <p>Funds should arrive in your bank account shortly.</p>
-        `,
+        html: `<div style="${baseStyle}">
+          <h2 style="${headerStyle}">Withdrawal Processed! 💰</h2>
+          <p style="${textStyle}">Your withdrawal for receipt "${receipt.description}" has been processed.</p>
+          <p style="${textStyle}">Funds should arrive in your bank account shortly.</p>
+        </div>`,
       },
     };
 
@@ -133,10 +166,10 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${resendApiKey}`,
+        Authorization: `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: "Surer <notifications@surer.ng>",
+        from: "Surer <onboarding@resend.dev>",
         to: template.to.filter(Boolean),
         subject: template.subject,
         html: template.html,
@@ -144,6 +177,7 @@ Deno.serve(async (req) => {
     });
 
     const emailResult = await emailResponse.json();
+    console.log("Email sent:", type, "result:", JSON.stringify(emailResult));
 
     return new Response(
       JSON.stringify({ success: true, data: emailResult }),
