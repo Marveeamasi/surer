@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
+import PinVerifyDialog from "@/components/PinVerifyDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -24,27 +25,21 @@ const CreateReceipt = () => {
   const [iAmReceiver, setIAmReceiver] = useState(isReceiverParam);
   const [loading, setLoading] = useState(false);
 
-  // When "I am receiving money" is toggled on, auto-fill with logged-in user's email
+  // PIN verify
+  const [pinOpen, setPinOpen] = useState(false);
+
   useEffect(() => {
-    if (isReceiverParam) {
-      setIAmReceiver(true);
-    }
+    if (isReceiverParam) setIAmReceiver(true);
   }, [isReceiverParam]);
 
   const numericAmount = parseFloat(amount) || 0;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeCreate = async () => {
     if (!user) return;
-
-    if (numericAmount < 1000) {
-      toast.error("Minimum amount is ₦1,000");
-      return;
-    }
+    if (numericAmount < 1000) { toast.error("Minimum amount is ₦1,000"); return; }
 
     setLoading(true);
     const fees = calculateFees(numericAmount);
-
     const receiptData: any = {
       amount: numericAmount,
       description,
@@ -55,12 +50,10 @@ const CreateReceipt = () => {
     };
 
     if (iAmReceiver) {
-      // I am the receiver, so the counterparty email is the sender's email
       receiptData.receiver_id = user.id;
       receiptData.receiver_email = user.email;
-      receiptData.sender_id = user.id; // Placeholder until sender pays
+      receiptData.sender_id = user.id; // Placeholder
     } else {
-      // I am the sender
       receiptData.sender_id = user.id;
       receiptData.receiver_email = counterpartyEmail;
     }
@@ -74,6 +67,12 @@ const CreateReceipt = () => {
       toast.success("Receipt created!");
       navigate("/dashboard");
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (numericAmount < 1000) { toast.error("Minimum amount is ₦1,000"); return; }
+    setPinOpen(true);
   };
 
   return (
@@ -90,82 +89,38 @@ const CreateReceipt = () => {
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="flex items-center gap-3 bg-secondary rounded-xl p-4">
-                <Checkbox
-                  id="receiver"
-                  checked={iAmReceiver}
-                  onCheckedChange={(c) => {
-                    setIAmReceiver(!!c);
-                    if (c) setCounterpartyEmail("");
-                  }}
-                />
-                <label htmlFor="receiver" className="text-sm font-medium text-foreground cursor-pointer">
-                  I am receiving money
-                </label>
+                <Checkbox id="receiver" checked={iAmReceiver} onCheckedChange={(c) => { setIAmReceiver(!!c); if (c) setCounterpartyEmail(""); }} />
+                <label htmlFor="receiver" className="text-sm font-medium text-foreground cursor-pointer">I am receiving money</label>
               </div>
 
               {iAmReceiver ? (
                 <>
-                  {/* Show my email as receiver (read-only) */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground">My Email (Receiver)</label>
-                    <Input
-                      type="email"
-                      value={user?.email || ""}
-                      readOnly
-                      className="h-12 bg-muted cursor-not-allowed"
-                    />
+                    <Input type="email" value={user?.email || ""} readOnly className="h-12 bg-muted cursor-not-allowed" />
                   </div>
-                  {/* Sender's email */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground">Sender's Email</label>
-                    <Input
-                      type="email"
-                      placeholder="sender@example.com"
-                      value={counterpartyEmail}
-                      onChange={(e) => setCounterpartyEmail(e.target.value)}
-                      required
-                      className="h-12"
-                    />
+                    <Input type="email" placeholder="sender@example.com" value={counterpartyEmail} onChange={(e) => setCounterpartyEmail(e.target.value)} required className="h-12" />
                   </div>
                 </>
               ) : (
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Receiver's Email</label>
-                  <Input
-                    type="email"
-                    placeholder="receiver@example.com"
-                    value={counterpartyEmail}
-                    onChange={(e) => setCounterpartyEmail(e.target.value)}
-                    required
-                    className="h-12"
-                  />
+                  <Input type="email" placeholder="receiver@example.com" value={counterpartyEmail} onChange={(e) => setCounterpartyEmail(e.target.value)} required className="h-12" />
                 </div>
               )}
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Amount (₦)</label>
-                <Input
-                  type="number"
-                  placeholder="10,000"
-                  min="1000"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  required
-                  className="h-12 text-lg font-semibold"
-                />
+                <Input type="number" placeholder="10,000" min="1000" value={amount} onChange={(e) => setAmount(e.target.value)} required className="h-12 text-lg font-semibold" />
               </div>
 
               <FeeCalculator amount={numericAmount} />
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Description</label>
-                <Textarea
-                  placeholder="What's this payment for? (e.g., Logo design, Phone purchase)"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  required
-                  rows={3}
-                />
+                <Textarea placeholder="What's this payment for? (e.g., Logo design, Phone purchase)" value={description} onChange={(e) => setDescription(e.target.value)} required rows={3} />
               </div>
 
               <Button variant="hero" size="lg" className="w-full" disabled={loading}>
@@ -175,6 +130,14 @@ const CreateReceipt = () => {
           </motion.div>
         </div>
       </div>
+
+      <PinVerifyDialog
+        open={pinOpen}
+        onOpenChange={setPinOpen}
+        onVerified={executeCreate}
+        title="Confirm Receipt Creation"
+        description="Enter your PIN to create this receipt."
+      />
     </AppLayout>
   );
 };

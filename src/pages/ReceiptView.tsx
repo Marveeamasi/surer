@@ -2,15 +2,16 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, Shield, CheckCircle, Copy, AlertTriangle, Trash2, CreditCard,
-  Edit, X, Send, Loader2, Camera, Upload, Image as ImageIcon, XCircle
+  Edit, X, Send, Loader2, Camera, Upload, XCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
 import { FeeCalculator, formatNaira } from "@/components/FeeCalculator";
 import DisputeTimer from "@/components/DisputeTimer";
+import PinVerifyDialog from "@/components/PinVerifyDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/supabase";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +19,7 @@ import { toast } from "sonner";
 
 const ReceiptView = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [receipt, setReceipt] = useState<any>(null);
@@ -40,6 +42,19 @@ const ReceiptView = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  // PIN verification
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [pinTitle, setPinTitle] = useState("");
+  const [pinDesc, setPinDesc] = useState("");
+
+  const requirePin = (title: string, desc: string, action: () => void) => {
+    setPinTitle(title);
+    setPinDesc(desc);
+    setPendingAction(() => action);
+    setPinOpen(true);
+  };
+
   const fetchReceipt = async () => {
     const { data, error } = await db
       .from("receipts")
@@ -51,7 +66,6 @@ const ReceiptView = () => {
       toast.error("Receipt not found");
     } else {
       setReceipt(data);
-      // Fetch associated dispute
       const { data: disputeData } = await db
         .from("disputes")
         .select("*")
@@ -64,6 +78,18 @@ const ReceiptView = () => {
     setLoading(false);
   };
 
+  // Check for Paystack spam fee callback
+  useEffect(() => {
+    const ref = searchParams.get("reference");
+    const trxref = searchParams.get("trxref");
+    if (ref || trxref) {
+      // Spam fee payment returned - verify and proceed
+      toast.success("Fee payment confirmed! You can now submit your decision.");
+      // Clean URL
+      window.history.replaceState({}, "", `/receipt/${id}`);
+    }
+  }, [searchParams, id]);
+
   useEffect(() => {
     fetchReceipt();
   }, [id]);
@@ -72,15 +98,15 @@ const ReceiptView = () => {
   const isReceiver = receipt?.receiver_id === user?.id || receipt?.receiver_email === user?.email;
   const isCreator = receipt?.created_by === user?.id;
 
-  // Pay Now handler
-  const handlePayNow = async () => {
+  // Pay Now
+  const executePayNow = async () => {
     setPaying(true);
     try {
       const { data, error } = await supabase.functions.invoke("payscrow-create-payment", {
         body: { receiptId: receipt.id },
       });
       if (error || !data?.paymentLink) {
-        toast.error(data?.error || "Failed to initialize payment");  
+        toast.error(data?.error || "Failed to initialize payment");
       } else {
         window.location.href = data.paymentLink;
       }
@@ -90,15 +116,16 @@ const ReceiptView = () => {
     setPaying(false);
   };
 
+  const handlePayNow = () => {
+    requirePin("Confirm Payment", "Enter your PIN to proceed with payment.", executePayNow);
+  };
+
   // Update receipt
-  const handleUpdate = async () => {
+  const executeUpdate = async () => {
     setSaving(true);
     const { error } = await db
       .from("receipts")
-      .update({
-        amount: parseFloat(editAmount),
-        description: editDescription,
-      })
+      .update({ amount: parseFloat(editAmount), description: editDescription })
       .eq("id", receipt.id);
     setSaving(false);
     if (error) toast.error("Failed to update");
@@ -109,24 +136,29 @@ const ReceiptView = () => {
     }
   };
 
-  // Delete receipt
-  const handleDelete = async () => {
-    const { error } = await db.from("receipts").delete().eq("id", receipt.id);
-    if (error) toast.error("Cannot delete");
-    else {
-      toast.success("Receipt deleted");
-      navigate("/dashboard");
-    }
+  const handleUpdate = () => {
+    requirePin("Confirm Update", "Enter your PIN to update this receipt.", executeUpdate);
   };
 
-  // Copy clean link
+  // Delete receipt
+  const executeDelete = async () => {
+    const { error } = await db.from("receipts").delete().eq("id", receipt.id);
+    if (error) toast.error("Cannot delete");
+    else { toast.success("Receipt deleted"); navigate("/dashboard"); }
+  };
+
+  const handleDelete = () => {
+    requirePin("Confirm Deletion", "Enter your PIN to permanently delete this receipt.", executeDelete);
+  };
+
+  // Copy link
   const handleCopyLink = () => {
     const cleanUrl = `${window.location.origin}/receipt/${receipt.id}`;
     navigator.clipboard.writeText(cleanUrl);
     toast.success("Link copied!");
   };
 
-  // File handling for decision evidence
+  // File handling
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     setDecisionEvidence((prev) => [...prev, ...files]);
@@ -147,7 +179,6 @@ const ReceiptView = () => {
     return 300;
   };
 
-  // Needs spam fee: decisions 2, 3, and 6
   const needsSpamFee = (type: string) => ["release_specific", "refund", "reject"].includes(type);
   const needsReason = (type: string) => ["release_specific", "refund", "reject"].includes(type);
 
@@ -162,12 +193,14 @@ const ReceiptView = () => {
     if (needsReason(type)) {
       setShowDecisionForm(true);
     } else {
-      // Direct decisions (release_all, delivered, accept) - execute immediately
-      submitDecision(type, "", "");
+      // Direct decisions (release_all, delivered, accept) - require PIN first
+      requirePin("Confirm Decision", "Enter your PIN to confirm this decision.", () => {
+        submitDecision(type, "", "");
+      });
     }
   };
 
-  // Upload evidence files
+  // Upload evidence
   const uploadEvidence = async (disputeId: string) => {
     for (const file of decisionEvidence) {
       const path = `${disputeId}/${Date.now()}-${file.name}`;
@@ -185,18 +218,12 @@ const ReceiptView = () => {
     }
   };
 
-  // Submit decision
+  // Submit decision (after PIN + spam fee verified)
   const submitDecision = async (type: string, reason: string, amount: string) => {
     setSubmittingDecision(true);
     const isSenderDecision = isSender;
 
     try {
-      // For spam fee decisions, pay via Paystack first
-      if (needsSpamFee(type)) {
-        // For now we'll record the decision - in production integrate Paystack for fee
-        // The fee payment can be verified server-side
-      }
-
       const updateData: any = {};
       if (isSenderDecision) {
         updateData.sender_decision = type;
@@ -212,7 +239,7 @@ const ReceiptView = () => {
         updateData.decision_auto_execute_at = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
       }
 
-      // Determine outcome based on current + new decision
+      // Determine outcome
       const currentSenderDec = isSenderDecision ? type : receipt.sender_decision;
       const currentReceiverDec = isSenderDecision ? receipt.receiver_decision : type;
 
@@ -220,45 +247,20 @@ const ReceiptView = () => {
       let shouldRelease = false;
 
       if (receipt.status === "active") {
-        // (1 and 4) or (4 and 1) => release true, completed
         if (currentSenderDec === "release_all" && currentReceiverDec === "delivered") {
-          shouldRelease = true;
-          newStatus = "completed";
-        } else if (currentSenderDec === "release_all" && !currentReceiverDec) {
-          // Sender chose release_all, no receiver decision yet - wait or auto-execute in 2 days
-          newStatus = "active";
-        } else if (!currentSenderDec && currentReceiverDec === "delivered") {
-          // Receiver delivered, no sender decision yet - wait or auto-execute in 2 days
-          newStatus = "active";
+          shouldRelease = true; newStatus = "completed";
+        } else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
+          shouldRelease = true; newStatus = "completed";
+        } else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "reject") {
+          newStatus = "dispute"; updateData.decision_auto_execute_at = null;
         }
-        // When sender makes 2 or 3 and receiver responds 5 => release true
-        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
-          shouldRelease = true;
-          newStatus = "completed";
-        }
-        // When sender makes 2 or 3 and receiver responds 6 => dispute
-        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "reject") {
-          newStatus = "dispute";
-          // Clear auto-execute timer since we're entering dispute
-          updateData.decision_auto_execute_at = null;
-        }
-        // Sender chose 2 or 3, receiver hasn't responded yet - replace receiver's 4 with 5/6
-        // The UI handles this by showing appropriate buttons
       } else if (receipt.status === "dispute") {
-        // In dispute: if accept (5), release true
         if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
-          shouldRelease = true;
-          newStatus = "completed";
-        }
-        // In dispute: if reject again, stays dispute
-        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "reject") {
-          newStatus = "dispute";
+          shouldRelease = true; newStatus = "completed";
         }
       }
 
       updateData.status = newStatus;
-
-      // If the other party responded, clear the auto-execute timer
       if (currentSenderDec && currentReceiverDec) {
         updateData.decision_auto_execute_at = null;
       }
@@ -269,7 +271,6 @@ const ReceiptView = () => {
       if (decisionEvidence.length > 0 && dispute?.id) {
         await uploadEvidence(dispute.id);
       } else if (decisionEvidence.length > 0 && newStatus === "dispute") {
-        // Create dispute record for evidence storage
         const { data: newDispute } = await db.from("disputes").insert({
           receipt_id: receipt.id,
           initiated_by: user!.id,
@@ -286,15 +287,14 @@ const ReceiptView = () => {
         }
       }
 
-      // If should release, call edge function
       if (shouldRelease) {
         try {
           await supabase.functions.invoke("payscrow-release", {
             body: {
               receiptId: receipt.id,
               decision: currentSenderDec,
-              amount: currentSenderDec === "release_specific" 
-                ? (isSenderDecision ? parseFloat(amount) : receipt.sender_decision_amount) 
+              amount: currentSenderDec === "release_specific"
+                ? (isSenderDecision ? parseFloat(amount) : receipt.sender_decision_amount)
                 : null,
             },
           });
@@ -303,11 +303,11 @@ const ReceiptView = () => {
         }
       }
 
-      // Send notification email to other party
+      // Send notification
       try {
         await supabase.functions.invoke("send-notification-email", {
           body: {
-            type: "decision_made",
+            type: newStatus === "dispute" ? "dispute_started" : "decision_made",
             receiptId: receipt.id,
             decision: type,
             reason: reason || undefined,
@@ -328,17 +328,71 @@ const ReceiptView = () => {
     setSubmittingDecision(false);
   };
 
-  const handleDecisionFormSubmit = (e: React.FormEvent) => {
+  // Form submit for decisions requiring reason/evidence + spam fee
+  const handleDecisionFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    submitDecision(decisionType, decisionReason, decisionAmount);
+
+    // Decisions 2, 3, 6 require spam fee payment via Paystack first
+    if (needsSpamFee(decisionType)) {
+      requirePin("Confirm Decision", "Enter your PIN to pay the anti-spam fee and submit your decision.", async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("paystack-initialize-spam-fee", {
+            body: {
+              amount: getSpamFee(),
+              callbackUrl: `${window.location.origin}/receipt/${receipt.id}`,
+              receiptId: receipt.id,
+              decisionType,
+            },
+          });
+
+          if (error || !data?.authorization_url) {
+            toast.error(data?.error || "Failed to initialize fee payment");
+            return;
+          }
+
+          // Store pending decision in sessionStorage so we can resume after Paystack redirect
+          sessionStorage.setItem("pending_decision", JSON.stringify({
+            receiptId: receipt.id,
+            type: decisionType,
+            reason: decisionReason,
+            amount: decisionAmount,
+            reference: data.reference,
+          }));
+
+          // Redirect to Paystack
+          window.location.href = data.authorization_url;
+        } catch {
+          toast.error("Fee payment failed");
+        }
+      });
+    } else {
+      requirePin("Confirm Decision", "Enter your PIN to submit this decision.", () => {
+        submitDecision(decisionType, decisionReason, decisionAmount);
+      });
+    }
   };
 
-  // Determine which buttons to show for sender
+  // Resume pending decision after Paystack callback
+  useEffect(() => {
+    const ref = searchParams.get("reference") || searchParams.get("trxref");
+    if (ref && receipt) {
+      const pendingStr = sessionStorage.getItem("pending_decision");
+      if (pendingStr) {
+        const pending = JSON.parse(pendingStr);
+        if (pending.receiptId === receipt.id) {
+          sessionStorage.removeItem("pending_decision");
+          toast.success("Fee paid! Submitting your decision...");
+          submitDecision(pending.type, pending.reason, pending.amount);
+          window.history.replaceState({}, "", `/receipt/${id}`);
+        }
+      }
+    }
+  }, [searchParams, receipt]);
+
+  // Sender action buttons
   const getSenderActions = () => {
     if (!isSender || receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
-
-    const hasSenderDecision = !!receipt.sender_decision;
-    if (hasSenderDecision) return null; // Already decided
+    if (receipt.sender_decision) return null;
 
     return (
       <div className="space-y-3">
@@ -356,14 +410,11 @@ const ReceiptView = () => {
     );
   };
 
-  // Determine which buttons to show for receiver
+  // Receiver action buttons
   const getReceiverActions = () => {
     if (!isReceiver || receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
+    if (receipt.receiver_decision) return null;
 
-    const hasReceiverDecision = !!receipt.receiver_decision;
-    if (hasReceiverDecision) return null;
-
-    // If sender chose 2 or 3, receiver sees Accept (5) / Reject (6) instead of Delivered (4)
     const senderChosePartialOrRefund = receipt.sender_decision === "release_specific" || receipt.sender_decision === "refund";
 
     if (senderChosePartialOrRefund) {
@@ -401,10 +452,9 @@ const ReceiptView = () => {
     );
   };
 
-  // Show existing decisions
+  // Decision display
   const getDecisionDisplay = () => {
     if (!receipt.sender_decision && !receipt.receiver_decision) return null;
-
     const decisionLabels: Record<string, string> = {
       release_all: "Release Full Payment",
       release_specific: `Release ${formatNaira(receipt.sender_decision_amount || 0)}`,
@@ -413,7 +463,6 @@ const ReceiptView = () => {
       accept: "Accepted",
       reject: "Rejected",
     };
-
     return (
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground uppercase tracking-wider">Decisions Made</p>
@@ -423,9 +472,7 @@ const ReceiptView = () => {
               <span className="text-xs font-medium text-primary">Sender</span>
             </div>
             <p className="font-semibold text-sm text-foreground">{decisionLabels[receipt.sender_decision] || receipt.sender_decision}</p>
-            {receipt.sender_decision_reason && (
-              <p className="text-xs text-muted-foreground mt-1 italic">"{receipt.sender_decision_reason}"</p>
-            )}
+            {receipt.sender_decision_reason && <p className="text-xs text-muted-foreground mt-1 italic">"{receipt.sender_decision_reason}"</p>}
           </div>
         )}
         {receipt.receiver_decision && (
@@ -434,9 +481,7 @@ const ReceiptView = () => {
               <span className="text-xs font-medium text-accent">Receiver</span>
             </div>
             <p className="font-semibold text-sm text-foreground">{decisionLabels[receipt.receiver_decision] || receipt.receiver_decision}</p>
-            {receipt.receiver_decision_reason && (
-              <p className="text-xs text-muted-foreground mt-1 italic">"{receipt.receiver_decision_reason}"</p>
-            )}
+            {receipt.receiver_decision_reason && <p className="text-xs text-muted-foreground mt-1 italic">"{receipt.receiver_decision_reason}"</p>}
           </div>
         )}
       </div>
@@ -517,41 +562,27 @@ const ReceiptView = () => {
               </div>
             </div>
 
-            {/* Decisions display */}
             {getDecisionDisplay()}
 
-            {/* Auto-execute timer for active receipts with decisions */}
             {receipt.decision_auto_execute_at && receipt.status === "active" && (
-              <DisputeTimer
-                expiresAt={receipt.decision_auto_execute_at}
-                autoExecuteAt={receipt.decision_auto_execute_at}
-                status="active"
-              />
+              <DisputeTimer expiresAt={receipt.decision_auto_execute_at} autoExecuteAt={receipt.decision_auto_execute_at} status="active" />
             )}
 
-            {/* Dispute timer */}
             {dispute && (receipt.status === "dispute" || receipt.status === "unresolved") && (
-              <DisputeTimer
-                expiresAt={dispute.expires_at}
-                autoExecuteAt={dispute.auto_execute_at}
-                status={dispute.status}
-              />
+              <DisputeTimer expiresAt={dispute.expires_at} autoExecuteAt={dispute.auto_execute_at} status={dispute.status} />
             )}
 
-            {/* Pay Now - for sender on pending receipt */}
+            {/* Pay Now */}
             {isSender && receipt.status === "pending" && (
               <Button variant="hero" size="lg" className="w-full" onClick={handlePayNow} disabled={paying}>
                 {paying ? <><Loader2 className="w-5 h-5 animate-spin" /> Initializing...</> : <><CreditCard className="w-5 h-5" /> Pay Now</>}
               </Button>
             )}
 
-            {/* Sender actions for active/dispute receipt */}
             {getSenderActions()}
-
-            {/* Receiver actions for active/dispute receipt */}
             {getReceiverActions()}
 
-            {/* Decision form with reason + evidence (for 2, 3, 6) */}
+            {/* Decision form */}
             <AnimatePresence>
               {showDecisionForm && (
                 <motion.form
@@ -570,7 +601,7 @@ const ReceiptView = () => {
                     <div className="bg-warning/10 rounded-xl p-3 flex gap-2">
                       <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
                       <p className="text-xs text-muted-foreground">
-                        A fee of ₦{getSpamFee().toLocaleString()} will be charged to prevent abuse.
+                        A fee of <strong>₦{getSpamFee().toLocaleString()}</strong> will be charged via Paystack to prevent abuse.
                       </p>
                     </div>
                   )}
@@ -578,31 +609,15 @@ const ReceiptView = () => {
                   {decisionType === "release_specific" && (
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Amount to release (₦)</label>
-                      <Input
-                        type="number"
-                        min={1000}
-                        max={receipt.amount}
-                        placeholder="Amount"
-                        value={decisionAmount}
-                        onChange={(e) => setDecisionAmount(e.target.value)}
-                        required
-                        className="h-12 text-lg font-semibold"
-                      />
+                      <Input type="number" min={1000} max={receipt.amount} placeholder="Amount" value={decisionAmount} onChange={(e) => setDecisionAmount(e.target.value)} required className="h-12 text-lg font-semibold" />
                     </div>
                   )}
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground">Reason</label>
-                    <Textarea
-                      placeholder="Explain your decision..."
-                      value={decisionReason}
-                      onChange={(e) => setDecisionReason(e.target.value)}
-                      required
-                      rows={3}
-                    />
+                    <Textarea placeholder="Explain your decision..." value={decisionReason} onChange={(e) => setDecisionReason(e.target.value)} required rows={3} />
                   </div>
 
-                  {/* Evidence upload */}
                   <div className="space-y-3">
                     <label className="text-sm font-medium text-foreground">Evidence (optional)</label>
                     <div className="flex gap-3">
@@ -615,7 +630,6 @@ const ReceiptView = () => {
                     </div>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
                     <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} className="hidden" />
-
                     {decisionPreviews.length > 0 && (
                       <div className="grid grid-cols-3 gap-2">
                         {decisionPreviews.map((url, i) => (
@@ -670,20 +684,26 @@ const ReceiptView = () => {
               </motion.div>
             )}
 
-            {/* Delete pending receipt (only creator) */}
             {receipt.status === "pending" && isCreator && (
               <Button variant="destructive" size="lg" className="w-full" onClick={handleDelete}>
                 <Trash2 className="w-5 h-5" /> Delete Receipt
               </Button>
             )}
 
-            {/* Copy link */}
             <Button variant="secondary" className="w-full" onClick={handleCopyLink}>
               <Copy className="w-4 h-4" /> Copy Receipt Link
             </Button>
           </motion.div>
         </div>
       </div>
+
+      <PinVerifyDialog
+        open={pinOpen}
+        onOpenChange={setPinOpen}
+        onVerified={() => { if (pendingAction) pendingAction(); setPendingAction(null); }}
+        title={pinTitle}
+        description={pinDesc}
+      />
     </AppLayout>
   );
 };
