@@ -1,5 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { createHmac } from "https://deno.land/std@0.224.0/crypto/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,19 +24,15 @@ Deno.serve(async (req) => {
     const body = await req.text();
     const payload = JSON.parse(body);
 
-    // Verify Paystack signature
+    // Verify Paystack HMAC-SHA512 signature
     const signature = req.headers.get("x-paystack-signature");
     if (signature) {
       const encoder = new TextEncoder();
       const key = encoder.encode(paystackKey);
       const data = encoder.encode(body);
-      
+
       const cryptoKey = await crypto.subtle.importKey(
-        "raw",
-        key,
-        { name: "HMAC", hash: "SHA-512" },
-        false,
-        ["sign"]
+        "raw", key, { name: "HMAC", hash: "SHA-512" }, false, ["sign"]
       );
       const sig = await crypto.subtle.sign("HMAC", cryptoKey, data);
       const hash = Array.from(new Uint8Array(sig))
@@ -54,9 +49,9 @@ Deno.serve(async (req) => {
     }
 
     const event = payload.event;
-    const data = payload.data;
+    const eventData = payload.data;
 
-    console.log("Paystack webhook event:", event, "ref:", data?.reference);
+    console.log("Paystack webhook event:", event, "ref:", eventData?.reference);
 
     if (event !== "charge.success") {
       return new Response(JSON.stringify({ received: true }), {
@@ -64,17 +59,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Verify payment on Paystack
+    // Verify payment with Paystack
     const verifyResponse = await fetch(
-      `https://api.paystack.co/transaction/verify/${data.reference}`,
-      {
-        headers: { Authorization: `Bearer ${paystackKey}` },
-      }
+      `https://api.paystack.co/transaction/verify/${eventData.reference}`,
+      { headers: { Authorization: `Bearer ${paystackKey}` } }
     );
     const verifyData = await verifyResponse.json();
 
@@ -88,21 +76,10 @@ Deno.serve(async (req) => {
     const metadata = verifyData.data.metadata || {};
 
     if (metadata.type === "spam_fee") {
-      // Spam fee paid successfully - store the verified reference
-      // The frontend will check this reference before allowing the decision
-      const userId = metadata.user_id;
-      const receiptId = metadata.receipt_id;
-      const decisionType = metadata.decision_type;
-
-      console.log(`Spam fee paid: user=${userId}, receipt=${receiptId}, decision=${decisionType}, ref=${data.reference}`);
-
-      // Update the receipt to mark spam fee as paid for this decision
-      // We use a simple approach: store the reference in the receipt
-      if (receiptId) {
-        // We'll use the receipt's updated_at as a signal, but more importantly
-        // the frontend will verify the reference via Paystack
-        console.log(`Spam fee verified for receipt ${receiptId}, decision ${decisionType}`);
-      }
+      console.log(`Spam fee verified: user=${metadata.user_id}, receipt=${metadata.receipt_id}, decision=${metadata.decision_type}, ref=${eventData.reference}`);
+      // Spam fee is verified. The frontend handles the decision submission flow
+      // via redirect callback with the reference parameter.
+      // No additional DB action needed - the reference in the URL is the verification.
     }
 
     return new Response(JSON.stringify({ received: true, verified: true }), {

@@ -78,21 +78,29 @@ const ReceiptView = () => {
     setLoading(false);
   };
 
-  // Check for Paystack spam fee callback
-  useEffect(() => {
-    const ref = searchParams.get("reference");
-    const trxref = searchParams.get("trxref");
-    if (ref || trxref) {
-      // Spam fee payment returned - verify and proceed
-      toast.success("Fee payment confirmed! You can now submit your decision.");
-      // Clean URL
-      window.history.replaceState({}, "", `/receipt/${id}`);
-    }
-  }, [searchParams, id]);
-
   useEffect(() => {
     fetchReceipt();
   }, [id]);
+
+  // Resume pending decision after Paystack spam fee callback
+  useEffect(() => {
+    const ref = searchParams.get("reference") || searchParams.get("trxref");
+    if (ref && receipt) {
+      const pendingStr = sessionStorage.getItem("pending_decision");
+      if (pendingStr) {
+        const pending = JSON.parse(pendingStr);
+        if (pending.receiptId === receipt.id) {
+          sessionStorage.removeItem("pending_decision");
+          toast.success("Fee paid! Submitting your decision...");
+          submitDecision(pending.type, pending.reason, pending.amount);
+          window.history.replaceState({}, "", `/receipt/${id}`);
+        }
+      } else {
+        // Just clean the URL if no pending decision
+        window.history.replaceState({}, "", `/receipt/${id}`);
+      }
+    }
+  }, [searchParams, receipt]);
 
   const isSender = receipt?.sender_id === user?.id;
   const isReceiver = receipt?.receiver_id === user?.id || receipt?.receiver_email === user?.email;
@@ -218,6 +226,29 @@ const ReceiptView = () => {
     }
   };
 
+  // Ensure a dispute record exists for the receipt
+  const ensureDispute = async (reason: string, type: string, amt: string): Promise<string | null> => {
+    // Check if dispute already exists
+    if (dispute?.id) return dispute.id;
+
+    const { data: newDispute } = await db.from("disputes").insert({
+      receipt_id: receipt.id,
+      initiated_by: user!.id,
+      reason: reason || type,
+      proposed_action: type,
+      proposed_amount: type === "release_specific" ? parseFloat(amt) : null,
+      status: "open",
+      expires_at: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+      auto_execute_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+    }).select().single();
+
+    if (newDispute) {
+      setDispute(newDispute);
+      return newDispute.id;
+    }
+    return null;
+  };
+
   // Submit decision (after PIN + spam fee verified)
   const submitDecision = async (type: string, reason: string, amount: string) => {
     setSubmittingDecision(true);
@@ -225,6 +256,7 @@ const ReceiptView = () => {
 
     try {
       const updateData: any = {};
+
       if (isSenderDecision) {
         updateData.sender_decision = type;
         updateData.sender_decision_reason = reason || null;
@@ -234,66 +266,90 @@ const ReceiptView = () => {
         updateData.receiver_decision_reason = reason || null;
       }
 
-      // Set auto-execute timer (2 days) if no existing timer
-      if (!receipt.decision_auto_execute_at) {
-        updateData.decision_auto_execute_at = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
-      }
-
-      // Determine outcome
+      // Compute current state after this decision
       const currentSenderDec = isSenderDecision ? type : receipt.sender_decision;
       const currentReceiverDec = isSenderDecision ? receipt.receiver_decision : type;
 
       let newStatus = receipt.status;
       let shouldRelease = false;
 
+      // === ACTIVE STATUS LOGIC ===
       if (receipt.status === "active") {
+        // (1 and 4) or (4 and 1) => completed
         if (currentSenderDec === "release_all" && currentReceiverDec === "delivered") {
-          shouldRelease = true; newStatus = "completed";
-        } else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
-          shouldRelease = true; newStatus = "completed";
-        } else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "reject") {
-          newStatus = "dispute"; updateData.decision_auto_execute_at = null;
+          shouldRelease = true;
+          newStatus = "completed";
         }
-      } else if (receipt.status === "dispute") {
-        if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
-          shouldRelease = true; newStatus = "completed";
+        // (1 alone) => release_all, no need for receiver response, but wait 2 days
+        // (4 alone) => delivered, wait 2 days for sender response
+        // (2 or 3 alone) => wait for receiver 5/6, set timer
+        // (2/3 and 5) or (5 and 2/3) => completed
+        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
+          shouldRelease = true;
+          newStatus = "completed";
+        }
+        // (2/3 and 6) or (6 and 2/3) => dispute
+        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "reject") {
+          newStatus = "dispute";
+          updateData.decision_auto_execute_at = null;
+        }
+        // (1 alone without 4) => set 2-day timer if not already set
+        // (4 alone without 1) => set 2-day timer if not already set
+        // (2 or 3 alone without 5/6) => set 2-day timer
+        else if (!shouldRelease) {
+          // Set auto-execute timer (2 days) if a single-party decision was just made
+          if ((currentSenderDec && !currentReceiverDec) || (!currentSenderDec && currentReceiverDec)) {
+            updateData.decision_auto_execute_at = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+          }
         }
       }
+      // === DISPUTE STATUS LOGIC ===
+      else if (receipt.status === "dispute") {
+        // During dispute, sender can choose 1 (release_all) to end it immediately
+        if (currentSenderDec === "release_all") {
+          shouldRelease = true;
+          newStatus = "completed";
+        }
+        // (2/3 and 5) => completed
+        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
+          shouldRelease = true;
+          newStatus = "completed";
+        }
+        // (2/3 and 6) => stays dispute (both still disagree)
+        // No status change needed
+      }
 
-      updateData.status = newStatus;
+      // Clear timer if both parties have decided
       if (currentSenderDec && currentReceiverDec) {
         updateData.decision_auto_execute_at = null;
       }
 
+      updateData.status = newStatus;
+
       await db.from("receipts").update(updateData).eq("id", receipt.id);
 
-      // Upload evidence if any
-      if (decisionEvidence.length > 0 && dispute?.id) {
-        await uploadEvidence(dispute.id);
-      } else if (decisionEvidence.length > 0 && newStatus === "dispute") {
-        const { data: newDispute } = await db.from("disputes").insert({
-          receipt_id: receipt.id,
-          initiated_by: user!.id,
-          reason: reason || type,
-          proposed_action: type,
-          proposed_amount: type === "release_specific" ? parseFloat(amount) : null,
-          status: "open",
-          expires_at: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
-          auto_execute_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-        }).select().single();
-        if (newDispute) {
-          await uploadEvidence(newDispute.id);
-          setDispute(newDispute);
+      // Create dispute record if status changed to "dispute"
+      if (newStatus === "dispute" && receipt.status !== "dispute") {
+        const disputeId = await ensureDispute(reason, type, amount);
+        if (disputeId && decisionEvidence.length > 0) {
+          await uploadEvidence(disputeId);
         }
+      } else if (decisionEvidence.length > 0 && dispute?.id) {
+        // Upload evidence to existing dispute
+        await uploadEvidence(dispute.id);
       }
 
+      // If release logic is true, call payscrow-release
       if (shouldRelease) {
+        const releaseDecision = currentSenderDec === "release_all" ? "release_all" :
+          currentSenderDec === "release_specific" ? "release_specific" : "refund";
+
         try {
           await supabase.functions.invoke("payscrow-release", {
             body: {
               receiptId: receipt.id,
-              decision: currentSenderDec,
-              amount: currentSenderDec === "release_specific"
+              decision: releaseDecision,
+              amount: releaseDecision === "release_specific"
                 ? (isSenderDecision ? parseFloat(amount) : receipt.sender_decision_amount)
                 : null,
             },
@@ -303,11 +359,11 @@ const ReceiptView = () => {
         }
       }
 
-      // Send notification
+      // Send notification email
       try {
         await supabase.functions.invoke("send-notification-email", {
           body: {
-            type: newStatus === "dispute" ? "dispute_started" : "decision_made",
+            type: newStatus === "dispute" ? "dispute_started" : shouldRelease ? "dispute_resolved" : "decision_made",
             receiptId: receipt.id,
             decision: type,
             reason: reason || undefined,
@@ -318,7 +374,7 @@ const ReceiptView = () => {
         console.error("Notification error:", e);
       }
 
-      toast.success(shouldRelease ? "Decision made! Funds being processed." : "Decision recorded!");
+      toast.success(shouldRelease ? "Decision made! Funds being processed via Payscrow." : "Decision recorded!");
       setShowDecisionForm(false);
       await fetchReceipt();
     } catch (err) {
@@ -332,7 +388,6 @@ const ReceiptView = () => {
   const handleDecisionFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Decisions 2, 3, 6 require spam fee payment via Paystack first
     if (needsSpamFee(decisionType)) {
       requirePin("Confirm Decision", "Enter your PIN to pay the anti-spam fee and submit your decision.", async () => {
         try {
@@ -359,7 +414,6 @@ const ReceiptView = () => {
             reference: data.reference,
           }));
 
-          // Redirect to Paystack
           window.location.href = data.authorization_url;
         } catch {
           toast.error("Fee payment failed");
@@ -372,39 +426,28 @@ const ReceiptView = () => {
     }
   };
 
-  // Resume pending decision after Paystack callback
-  useEffect(() => {
-    const ref = searchParams.get("reference") || searchParams.get("trxref");
-    if (ref && receipt) {
-      const pendingStr = sessionStorage.getItem("pending_decision");
-      if (pendingStr) {
-        const pending = JSON.parse(pendingStr);
-        if (pending.receiptId === receipt.id) {
-          sessionStorage.removeItem("pending_decision");
-          toast.success("Fee paid! Submitting your decision...");
-          submitDecision(pending.type, pending.reason, pending.amount);
-          window.history.replaceState({}, "", `/receipt/${id}`);
-        }
-      }
-    }
-  }, [searchParams, receipt]);
-
   // Sender action buttons
   const getSenderActions = () => {
-    if (!isSender || receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
-    if (receipt.sender_decision) return null;
+    if (!isSender) return null;
+    if (receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
+
+    // During active: show if no decision yet
+    // During dispute: ALWAYS show (allow re-decision)
+    if (receipt.status === "active" && receipt.sender_decision) return null;
 
     return (
       <div className="space-y-3">
-        <p className="text-sm font-medium text-foreground">Your decision:</p>
+        <p className="text-sm font-medium text-foreground">
+          {receipt.status === "dispute" ? "Change your decision:" : "Your decision:"}
+        </p>
         <Button variant="hero" size="lg" className="w-full" onClick={() => startDecision("release_all")}>
           <CheckCircle className="w-5 h-5" /> Release Full Payment
         </Button>
         <Button variant="outline" size="lg" className="w-full" onClick={() => startDecision("release_specific")}>
-          <Send className="w-5 h-5" /> Release Specific Amount
+          <Send className="w-5 h-5" /> Release Specific Amount (₦{getSpamFee().toLocaleString()} fee)
         </Button>
         <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("refund")}>
-          <XCircle className="w-5 h-5" /> Request Full Refund
+          <XCircle className="w-5 h-5" /> Request Full Refund (₦{getSpamFee().toLocaleString()} fee)
         </Button>
       </div>
     );
@@ -412,26 +455,37 @@ const ReceiptView = () => {
 
   // Receiver action buttons
   const getReceiverActions = () => {
-    if (!isReceiver || receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
-    if (receipt.receiver_decision) return null;
+    if (!isReceiver) return null;
+    if (receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
+
+    // During active: show if no decision yet
+    // During dispute: ALWAYS show (allow re-decision - show 5/6)
+    if (receipt.status === "active" && receipt.receiver_decision) return null;
 
     const senderChosePartialOrRefund = receipt.sender_decision === "release_specific" || receipt.sender_decision === "refund";
 
-    if (senderChosePartialOrRefund) {
+    // If sender chose 2 or 3, OR we're in dispute status, show Accept/Reject
+    if (senderChosePartialOrRefund || receipt.status === "dispute") {
       return (
         <div className="space-y-3">
-          <div className="bg-warning/10 rounded-xl p-4">
-            <p className="text-sm font-semibold text-foreground mb-1">Sender's Decision</p>
-            <p className="text-sm text-muted-foreground">
-              {receipt.sender_decision === "refund"
-                ? "The sender is requesting a full refund."
-                : `The sender wants to release only ${formatNaira(receipt.sender_decision_amount || 0)} of ${formatNaira(receipt.amount)}.`}
-            </p>
-            {receipt.sender_decision_reason && (
-              <p className="text-xs text-muted-foreground mt-2 italic">"{receipt.sender_decision_reason}"</p>
-            )}
-          </div>
-          <p className="text-sm font-medium text-foreground">Your response:</p>
+          {receipt.sender_decision && (
+            <div className="bg-warning/10 rounded-xl p-4">
+              <p className="text-sm font-semibold text-foreground mb-1">Sender's Decision</p>
+              <p className="text-sm text-muted-foreground">
+                {receipt.sender_decision === "refund"
+                  ? "The sender is requesting a full refund."
+                  : receipt.sender_decision === "release_specific"
+                    ? `The sender wants to release only ${formatNaira(receipt.sender_decision_amount || 0)} of ${formatNaira(receipt.amount)}.`
+                    : `The sender chose: ${receipt.sender_decision}`}
+              </p>
+              {receipt.sender_decision_reason && (
+                <p className="text-xs text-muted-foreground mt-2 italic">"{receipt.sender_decision_reason}"</p>
+              )}
+            </div>
+          )}
+          <p className="text-sm font-medium text-foreground">
+            {receipt.status === "dispute" ? "Change your response:" : "Your response:"}
+          </p>
           <Button variant="hero" size="lg" className="w-full" onClick={() => startDecision("accept")}>
             <CheckCircle className="w-5 h-5" /> Accept
           </Button>
@@ -442,6 +496,7 @@ const ReceiptView = () => {
       );
     }
 
+    // Default: show "I Have Delivered" (decision 4)
     return (
       <div className="space-y-3">
         <p className="text-sm font-medium text-foreground">Your decision:</p>
