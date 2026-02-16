@@ -2,9 +2,9 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Shield, Zap, Users, MessageSquare, ArrowRight, CheckCircle, Lock, Smartphone } from "lucide-react";
+import { Shield, Zap, Users, MessageSquare, ArrowRight, CheckCircle, Smartphone, HeartHandshake } from "lucide-react";
 import { motion } from "framer-motion";
-import heroIllustration from "@/assets/hero-illustration.png";
+import heroIllustration from "@/assets/hero.avif";
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -53,28 +53,28 @@ const Index = () => {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <motion.div {...fadeUp} className="space-y-6">
               <div className="inline-flex items-center gap-2 bg-secondary rounded-full px-4 py-1.5 text-sm text-secondary-foreground">
-                <Lock className="w-3.5 h-3.5" />
-                <span>Protected by Payscrow</span>
+                <HeartHandshake className="w-6 h-6" />
+                <span>Loved by thousands across Nigeria</span>
               </div>
-              <h1 className="font-display text-4xl md:text-6xl font-bold leading-tight text-foreground">
+              <h1 className="font-display text-4xl md:text-6xl max-sm:text-center font-bold leading-tight text-foreground">
                 Pay anyone.{" "}
                 <span className="text-gradient-hero">Stay in control.</span>
               </h1>
-              <p className="text-lg text-muted-foreground max-w-lg">
-                Your money is only released when you're satisfied. Safe online payments built for everyday Nigerians — freelancers, vendors, artisans, and you.
+              <p className="text-lg text-muted-foreground max-w-lg max-sm:text-center">
+                Your money is only released when you're satisfied. Safe online payments built for everyday Nigerians: freelancers, vendors, artisans, and you.
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button variant="hero" size="xl" asChild>
                   <Link to="/auth">
-                    Start for Free <ArrowRight className="w-5 h-5" />
+                   Pay Someone Now <ArrowRight className="w-5 h-5" />
                   </Link>
                 </Button>
                 <Button variant="hero-outline" size="xl" asChild>
-                  <Link to="/how-it-works">See How It Works</Link>
+                  <Link to="#how-it-works">See How It Works</Link>
                 </Button>
               </div>
               <div className="flex items-center gap-4 text-sm text-muted-foreground pt-2">
-                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-accent" /> No hidden fees</span>
+                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-accent" /> Protected by Payscrow</span>
                 <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-accent" /> Works with Naira</span>
               </div>
             </motion.div>
@@ -100,6 +100,7 @@ const Index = () => {
       {/* Features */}
       <section className="py-16 md:py-24 px-4 bg-secondary">
         <div className="container mx-auto">
+          
           <motion.div {...fadeUp} className="text-center mb-12">
             <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3">
               Why Nigerians love Surer
@@ -108,29 +109,53 @@ const Index = () => {
               We made escrow so simple, you don't even need to know what escrow means.
             </p>
           </motion.div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {features.map((f, i) => (
-              <motion.div
-                key={f.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="bg-card rounded-2xl p-6 shadow-card hover:shadow-elevated transition-shadow duration-300"
-              >
-                <div className="w-12 h-12 rounded-xl bg-gradient-hero flex items-center justify-center mb-4">
-                  <f.icon className="w-6 h-6 text-primary-foreground" />
-                </div>
-                <h3 className="font-display font-semibold text-lg mb-2 text-foreground">{f.title}</h3>
-                <p className="text-sm text-muted-foreground">{f.description}</p>
-              </motion.div>
-            ))}
-          </div>
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {[
+                      {
+                        title: "Without Protection",
+                        items: [
+                          "✗ Money sent, no guarantee",
+                          "✗ Scammer keeps your cash",
+                          "✗ Hard to get money back",
+                          "✗ Stress & lost time",
+                        ],
+                        color: "border-border",
+                      },
+                      {
+                        title: "With Surer",
+                        items: [
+                          "✓ Money held in escrow",
+                          "✓ Released only on confirmation",
+                          "✓ Fair dispute resolution",
+                          "✓ Peace of mind guaranteed",
+                        ],
+                        color: "border-accent",
+                      },
+                    ].map((col, i) => (
+                      <div
+                        key={i}
+                        className={`p-6 rounded-xl border-2 ${
+                          i === 1
+                            ? "bg-accent/5 border-accent/50"
+                            : "bg-muted border-muted"
+                        }`}
+                      >
+                        <h4 className="font-semibold text-foreground mb-4 text-center sm:text-left">
+                          {col.title}
+                        </h4>
+                        <ul className="space-y-2 text-sm text-foreground/80">
+                          {col.items.map((item, j) => (
+                            <li key={j}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
         </div>
       </section>
 
       {/* How it works */}
-      <section className="py-16 md:py-24 px-4">
+      <section id="how-it-works" className="py-16 md:py-24 px-4">
         <div className="container mx-auto">
           <motion.div {...fadeUp} className="text-center mb-12">
             <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3">
