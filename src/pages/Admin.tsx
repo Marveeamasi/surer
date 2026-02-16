@@ -12,6 +12,7 @@ import { db } from "@/lib/supabase";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatNaira } from "@/components/FeeCalculator";
+import { NIGERIAN_BANKS } from "@/lib/nigerian-banks";
 
 const Admin = () => {
   const { user } = useAuth();
@@ -26,7 +27,7 @@ const Admin = () => {
 
   // Admin bank details
   const [showSettings, setShowSettings] = useState(false);
-  const [adminBankName, setAdminBankName] = useState("");
+  const [adminBankCode, setAdminBankCode] = useState("");
   const [adminAccountNumber, setAdminAccountNumber] = useState("");
   const [adminAccountName, setAdminAccountName] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
@@ -41,10 +42,9 @@ const Admin = () => {
       const { data } = await db.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
       setIsAdmin(!!data);
       if (data) {
-        // Load admin profile for bank details
         const { data: profile } = await db.from("profiles").select("*").eq("id", user.id).maybeSingle();
         if (profile) {
-          setAdminBankName(profile.bank_name || "");
+          setAdminBankCode(profile.bank_code || "");
           setAdminAccountNumber(profile.account_number || "");
           setAdminAccountName(profile.account_name || "");
         }
@@ -79,7 +79,6 @@ const Admin = () => {
     setResolving(true);
 
     try {
-      // Call payscrow-release which handles Payscrow API + DB updates + cleanup
       const { data, error } = await supabase.functions.invoke("payscrow-release", {
         body: {
           receiptId: selectedReceipt.id,
@@ -105,7 +104,7 @@ const Admin = () => {
         });
       }
 
-      toast.success("Decision executed! Funds being processed via Payscrow.");
+      toast.success("Decision executed! Settlement being processed via Payscrow.");
       setResolving(false);
       setSelectedReceipt(null);
       setDecision("");
@@ -125,14 +124,16 @@ const Admin = () => {
 
   const handleSaveAdminSettings = async () => {
     setSavingSettings(true);
+    const selectedBank = NIGERIAN_BANKS.find((b) => b.code === adminBankCode);
     const { error } = await db.from("profiles").update({
-      bank_name: adminBankName || null,
+      bank_name: selectedBank?.name || null,
+      bank_code: adminBankCode || null,
       account_number: adminAccountNumber || null,
       account_name: adminAccountName || null,
     }).eq("id", user!.id);
     setSavingSettings(false);
     if (error) toast.error("Failed to save");
-    else toast.success("Admin bank details saved!");
+    else toast.success("Admin bank details saved! Platform fees will be settled to this account.");
   };
 
   if (!isAdmin) {
@@ -172,10 +173,21 @@ const Admin = () => {
           {showSettings && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="bg-card rounded-2xl p-5 shadow-soft border border-border mb-6 space-y-4">
               <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
-                <CreditCard className="w-4 h-4" /> Admin Bank Details
+                <CreditCard className="w-4 h-4" /> Platform Settlement Account
               </h3>
-              <p className="text-xs text-muted-foreground">Platform fees will be sent to this account.</p>
-              <Input placeholder="Bank Name" value={adminBankName} onChange={(e) => setAdminBankName(e.target.value)} className="h-12" />
+              <p className="text-xs text-muted-foreground">The 1.5% platform fee from every transaction will be settled to this account via Payscrow.</p>
+              <Select value={adminBankCode} onValueChange={setAdminBankCode}>
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="Select bank" />
+                </SelectTrigger>
+                <SelectContent>
+                  {NIGERIAN_BANKS.map((bank) => (
+                    <SelectItem key={bank.code} value={bank.code}>
+                      {bank.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Input placeholder="Account Number" value={adminAccountNumber} onChange={(e) => setAdminAccountNumber(e.target.value.replace(/\D/g, ""))} maxLength={10} className="h-12" />
               <Input placeholder="Account Name" value={adminAccountName} onChange={(e) => setAdminAccountName(e.target.value)} className="h-12" />
               <Button variant="hero" className="w-full" onClick={handleSaveAdminSettings} disabled={savingSettings}>

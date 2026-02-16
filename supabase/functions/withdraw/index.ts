@@ -6,6 +6,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// NOTE: Withdrawals/settlements are handled automatically by Payscrow via settlement accounts.
+// This function exists only to record manual withdrawal requests for admin tracking
+// in cases where Payscrow settlement needs manual intervention.
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -41,14 +45,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const paystackKey = Deno.env.get("PAYSTACK_SECRET_KEY");
-    if (!paystackKey) {
-      return new Response(JSON.stringify({ error: "Payment processor not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     // Get user profile for bank details
     const { data: profile } = await supabaseAdmin
       .from("profiles")
@@ -63,7 +59,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify receipt and user is receiver
+    // Verify receipt exists and user is a participant
     const { data: receipt } = await supabaseAdmin
       .from("receipts")
       .select("*")
@@ -77,15 +73,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (receipt.receiver_id !== user.id) {
-      return new Response(JSON.stringify({ error: "Only the receiver can withdraw" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     if (receipt.status !== "completed") {
-      return new Response(JSON.stringify({ error: "Receipt must be completed to withdraw" }), {
+      return new Response(JSON.stringify({ error: "Receipt must be completed before requesting withdrawal" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -93,77 +82,8 @@ Deno.serve(async (req) => {
 
     const withdrawAmount = amount || receipt.amount;
 
-    // Step 1: Create Paystack transfer recipient
-    const recipientResponse = await fetch("https://api.paystack.co/transferrecipient", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${paystackKey}`,
-      },
-      body: JSON.stringify({
-        type: "nuban",
-        name: profile.account_name,
-        account_number: profile.account_number,
-        bank_code: profile.bank_name, // Bank name stored as code for Paystack
-        currency: "NGN",
-      }),
-    });
-
-    const recipientData = await recipientResponse.json();
-
-    if (!recipientData.status) {
-      console.error("Paystack recipient creation failed:", recipientData);
-      
-      // Create withdrawal record as pending for manual processing
-      const { data: withdrawal } = await supabaseAdmin
-        .from("withdrawals")
-        .insert({
-          user_id: user.id,
-          receipt_id: receiptId,
-          amount: withdrawAmount,
-          bank_name: profile.bank_name,
-          account_number: profile.account_number,
-          account_name: profile.account_name,
-          status: "pending",
-        })
-        .select()
-        .single();
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          withdrawal,
-          message: "Withdrawal queued for manual processing",
-          auto_transfer: false,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const recipientCode = recipientData.data.recipient_code;
-
-    // Step 2: Initiate Paystack transfer
-    const transferResponse = await fetch("https://api.paystack.co/transfer", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${paystackKey}`,
-      },
-      body: JSON.stringify({
-        source: "balance",
-        reason: `Surer withdrawal for receipt ${receiptId.slice(0, 8)}`,
-        amount: Math.round(withdrawAmount * 100), // Paystack uses kobo
-        recipient: recipientCode,
-        reference: `SURER-WD-${receiptId.slice(0, 8)}-${Date.now()}`,
-      }),
-    });
-
-    const transferData = await transferResponse.json();
-    console.log("Paystack transfer response:", JSON.stringify(transferData));
-
-    const transferStatus = transferData.status ? "processing" : "failed";
-
-    // Create withdrawal record
+    // Record withdrawal request for admin tracking
+    // Actual fund settlement is handled by Payscrow via settlement accounts
     const { data: withdrawal, error: wError } = await supabaseAdmin
       .from("withdrawals")
       .insert({
@@ -173,7 +93,7 @@ Deno.serve(async (req) => {
         bank_name: profile.bank_name,
         account_number: profile.account_number,
         account_name: profile.account_name,
-        status: transferStatus,
+        status: "processing", // Payscrow handles the actual settlement
       })
       .select()
       .single();
@@ -185,29 +105,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Send notification email
-    try {
-      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification-email`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-        },
-        body: JSON.stringify({
-          type: "withdrawal_success",
-          receiptId,
-        }),
-      });
-    } catch (e) {
-      console.error("Failed to send withdrawal notification:", e);
-    }
-
     return new Response(
       JSON.stringify({
         success: true,
         withdrawal,
-        auto_transfer: transferData.status,
-        transfer_reference: transferData.data?.reference || null,
+        message: "Settlement is being processed via Payscrow. Funds will be sent to your bank account automatically.",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

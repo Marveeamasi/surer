@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LogOut, CreditCard, KeyRound, Mail, Fingerprint, Loader2, Moon, Sun } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { motion } from "framer-motion";
@@ -12,13 +13,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
+import { NIGERIAN_BANKS, getBankName } from "@/lib/nigerian-banks";
 
 const Settings = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
 
-  const [bankName, setBankName] = useState("");
+  const [bankCode, setBankCode] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
   const [fingerprintEnabled, setFingerprintEnabled] = useState(false);
@@ -50,7 +52,7 @@ const Settings = () => {
       if (!user) return;
       const { data } = await db.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data) {
-        setBankName(data.bank_name || "");
+        setBankCode(data.bank_code || "");
         setAccountNumber(data.account_number || "");
         setAccountName(data.account_name || "");
         setFingerprintEnabled(data.fingerprint_enabled || false);
@@ -63,10 +65,12 @@ const Settings = () => {
   const executeSave = async () => {
     if (!user) return;
     setSaving(true);
+    const selectedBank = NIGERIAN_BANKS.find((b) => b.code === bankCode);
     const { error } = await db
       .from("profiles")
       .update({
-        bank_name: bankName || null,
+        bank_name: selectedBank?.name || null,
+        bank_code: bankCode || null,
         account_number: accountNumber || null,
         account_name: accountName || null,
         fingerprint_enabled: fingerprintEnabled,
@@ -192,10 +196,21 @@ const Settings = () => {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-foreground">
                 <CreditCard className="w-4 h-4" />
-                <h2 className="font-display font-semibold">Bank Details (for withdrawals)</h2>
+                <h2 className="font-display font-semibold">Bank Details (for settlements)</h2>
               </div>
               <div className="space-y-3">
-                <Input placeholder="Bank Name" value={bankName} onChange={(e) => setBankName(e.target.value)} className="h-12" />
+                <Select value={bankCode} onValueChange={setBankCode}>
+                  <SelectTrigger className="h-12">
+                    <SelectValue placeholder="Select your bank" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NIGERIAN_BANKS.map((bank) => (
+                      <SelectItem key={bank.code} value={bank.code}>
+                        {bank.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Input placeholder="Account Number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))} maxLength={10} className="h-12" />
                 <Input placeholder="Account Name" value={accountName} onChange={(e) => setAccountName(e.target.value)} className="h-12" />
               </div>

@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
 
     // ============================================================
     // 1. AUTO-EXECUTE: Active receipts with a decision past 2-day timer
-    // If one party made a decision and 2 days passed with no response,
+    // If one party made a decision and 2 days passed with no counter-response,
     // execute the existing decision automatically.
     // ============================================================
     const { data: activeReceipts } = await supabaseAdmin
@@ -35,27 +35,26 @@ Deno.serve(async (req) => {
 
     if (activeReceipts && activeReceipts.length > 0) {
       for (const receipt of activeReceipts) {
-        // Determine what decision to execute
         let decision = "";
         let amount: number | null = null;
 
         if (receipt.sender_decision && !receipt.receiver_decision) {
           // Sender made a decision, receiver didn't respond in 2 days
+          // Execute the sender's decision as-is
           decision = receipt.sender_decision;
           amount = receipt.sender_decision_amount;
         } else if (receipt.receiver_decision && !receipt.sender_decision) {
-          // Receiver made a decision (delivered), sender didn't respond in 2 days
-          // "delivered" by receiver with no sender response = release_all
+          // Receiver clicked "delivered" (4), sender didn't respond in 2 days
+          // Auto-release full payment to receiver
           decision = "release_all";
           amount = null;
         } else {
-          // Both made decisions but somehow didn't resolve - skip
+          // Both made decisions but somehow not resolved - skip
           continue;
         }
 
         console.log(`Auto-executing receipt ${receipt.id}: decision=${decision}, amount=${amount}`);
 
-        // Call payscrow-release to execute the decision
         try {
           const releaseRes = await fetch(
             `${Deno.env.get("SUPABASE_URL")}/functions/v1/payscrow-release`,
@@ -74,18 +73,17 @@ Deno.serve(async (req) => {
           );
           const releaseData = await releaseRes.json();
           console.log(`Release result for ${receipt.id}:`, JSON.stringify(releaseData));
+          autoExecuted++;
         } catch (e) {
           console.error("Release call failed for receipt:", receipt.id, e);
         }
-
-        autoExecuted++;
       }
     }
 
     // ============================================================
     // 2. ESCALATE: Disputes on "dispute" receipts past 4-day window
-    // If a receipt has been in "dispute" status for 4 days, escalate
-    // to "unresolved" so only admin can decide.
+    // If a receipt has been in "dispute" status and the dispute's
+    // expires_at has passed, escalate to "unresolved" for admin.
     // ============================================================
     const { data: disputeReceipts } = await supabaseAdmin
       .from("receipts")
@@ -94,7 +92,6 @@ Deno.serve(async (req) => {
 
     if (disputeReceipts && disputeReceipts.length > 0) {
       for (const receipt of disputeReceipts) {
-        // Check if there's a dispute with an expired timer (4 days)
         const { data: disputes } = await supabaseAdmin
           .from("disputes")
           .select("*")
@@ -117,7 +114,7 @@ Deno.serve(async (req) => {
               .eq("id", dispute.id);
           }
 
-          // Send notification to both parties
+          // Notify both parties
           try {
             await fetch(
               `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification-email`,
@@ -148,7 +145,7 @@ Deno.serve(async (req) => {
         autoExecuted,
         escalated,
         checkedAt: now,
-        message: `Processed ${autoExecuted} auto-executions and ${escalated} escalations`,
+        message: `Daily check: ${autoExecuted} auto-executions, ${escalated} escalations`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
