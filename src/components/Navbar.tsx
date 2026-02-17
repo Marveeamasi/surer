@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Shield, Menu, X, LogOut, Moon, Sun } from "lucide-react";
+import { Shield, Menu, X, LogOut, Moon, Sun, Lightbulb, LightbulbOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useTheme } from "next-themes";
@@ -28,7 +28,7 @@ const Navbar = () => {
               <Link to="/create" className="text-sm text-muted-foreground hover:text-foreground transition-colors">New Receipt</Link>
               <Link to="/settings" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Settings</Link>
               <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-                {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {theme === "dark" ? <LightbulbOff className="w-4 h-4 rotate-180" /> : <Lightbulb className="w-4 h-4 rotate-180" />}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => signOut()}>
                 <LogOut className="w-4 h-4" /> Sign Out
@@ -36,10 +36,8 @@ const Navbar = () => {
             </>
           ) : (
             <>
-              <Link to="/#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How it Works</Link>
-              <Link to="/#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
               <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-                {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {theme === "dark" ? <LightbulbOff className="w-4 h-4 rotate-180" /> : <Lightbulb className="w-4 h-4 rotate-180" />}
               </Button>
               <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign In</Link>
               <Button variant="hero" size="sm" asChild>
@@ -50,9 +48,14 @@ const Navbar = () => {
         </div>
 
         {/* Mobile toggle */}
-        <button className="md:hidden p-2" onClick={() => setMobileOpen(!mobileOpen)}>
+        <div className="md:hidden">
+        <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                {theme === "dark" ? <LightbulbOff className="w-4 h-4 rotate-180" /> : <Lightbulb className="w-4 h-4 rotate-180" />}
+              </Button>
+        <button className="p-2" onClick={() => setMobileOpen(!mobileOpen)}>
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
+        </div>
       </div>
 
       <AnimatePresence>
@@ -66,9 +69,6 @@ const Navbar = () => {
             <div className="flex flex-col gap-3 p-4">
               {user ? (
                 <>
-                  <Link to="/dashboard" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>Dashboard</Link>
-                  <Link to="/create" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>New Receipt</Link>
-                  <Link to="/settings" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>Settings</Link>
                   <Button variant="outline" onClick={() => { signOut(); setMobileOpen(false); }}>
                     <LogOut className="w-4 h-4" /> Sign Out
                   </Button>

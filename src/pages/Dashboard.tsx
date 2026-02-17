@@ -77,7 +77,7 @@ const Dashboard = () => {
       <div className="pt-24 pb-16 px-4">
         <div className="container mx-auto max-w-2xl">
           {/* Header */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-8 flex-wrap gap-5">
             <div>
               <h1 className="font-display text-2xl font-bold text-foreground">Your Receipts</h1>
               <p className="text-sm text-muted-foreground">{user?.email}</p>
@@ -85,9 +85,6 @@ const Dashboard = () => {
             <div className="flex gap-2">
               <Button variant="hero" size="sm" asChild>
                 <Link to="/create"><Plus className="w-4 h-4" /> New</Link>
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => signOut()}>
-                <LogOut className="w-4 h-4" />
               </Button>
             </div>
           </div>

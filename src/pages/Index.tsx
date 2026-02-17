@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Shield, Zap, Users, MessageSquare, ArrowRight, CheckCircle, Smartphone, HeartHandshake } from "lucide-react";
 import { motion } from "framer-motion";
 import heroIllustration from "@/assets/hero.avif";
+import { Logo } from "@/components/Logo";
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -48,15 +49,11 @@ const Index = () => {
       <Navbar />
 
       {/* Hero */}
-      <section className="pt-28 pb-16 md:pt-36 md:pb-24 px-4">
+      <section className="pt-28 pb-16 md:pt-36 md:pb-24">
         <div className="container mx-auto">
           <div className="grid md:grid-cols-2 gap-12 items-center">
-            <motion.div {...fadeUp} className="space-y-6">
-              <div className="inline-flex items-center gap-2 bg-secondary rounded-full px-4 py-1.5 text-sm text-secondary-foreground">
-                <HeartHandshake className="w-6 h-6" />
-                <span>Loved by thousands across Nigeria</span>
-              </div>
-              <h1 className="font-display text-4xl md:text-6xl max-sm:text-center font-bold leading-tight text-foreground">
+            <motion.div {...fadeUp} className="space-y-6 max-md:order-2 max-sm:px-4">
+              <h1 className="font-display text-4xl md:text-6xl max-sm:text-center font-extrabold leading-tight text-foreground">
                 Pay anyone.{" "}
                 <span className="text-gradient-hero">Stay in control.</span>
               </h1>
@@ -73,10 +70,6 @@ const Index = () => {
                   <Link to="#how-it-works">See How It Works</Link>
                 </Button>
               </div>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground pt-2">
-                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-accent" /> Protected by Payscrow</span>
-                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-accent" /> Works with Naira</span>
-              </div>
             </motion.div>
 
             <motion.div
@@ -84,13 +77,23 @@ const Index = () => {
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ duration: 0.7, delay: 0.2 }}
-              className="relative"
+              className="relative flex items-center justify-center max-md:order-1"
             >
-              <div className="absolute inset-0 bg-gradient-hero rounded-3xl opacity-10 blur-3xl" />
+              <div className="inline-flex items-center absolute z-10 mx-2 max-sm:text-center top-5 gap-2 bg-secondary rounded-full px-4 py-1.5 text-sm text-secondary-foreground">
+                <Logo size="sm"/>
+                <span>Loved by thousands across Nigeria</span>
+              </div>
+               <div className="flex items-center absolute z-20 bottom-5 max-sm:flex-col gap-4 text-sm text-white pt-2">
+                <span className="flex items-center gap-1 "><CheckCircle className="w-4 h-4" /> Protected by Payscrow</span>
+                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4" /> Works with Naira</span>
+              </div>
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-24 z-10 rounded-3xl bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
               <img
                 src={heroIllustration}
                 alt="Surer - Safe payments for Nigerians"
                 className="relative rounded-3xl shadow-elevated w-full"
+                loading="lazy"
+                decoding="async"
               />
             </motion.div>
           </div>
@@ -105,9 +108,6 @@ const Index = () => {
             <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3">
               Why Nigerians love Surer
             </h2>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              We made escrow so simple, you don't even need to know what escrow means.
-            </p>
           </motion.div>
          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {[
@@ -137,7 +137,7 @@ const Index = () => {
                         className={`p-6 rounded-xl border-2 ${
                           i === 1
                             ? "bg-accent/5 border-accent/50"
-                            : "bg-muted border-muted"
+                            : "bg-destructive/5 border-destructive/50"
                         }`}
                       >
                         <h4 className="font-semibold text-foreground mb-4 text-center sm:text-left">
@@ -236,7 +236,7 @@ const Index = () => {
             </p>
             <Button variant="hero" size="xl" asChild>
               <Link to="/auth">
-                Create Your Account <ArrowRight className="w-5 h-5" />
+                Pay Someone Safe<ArrowRight className="w-5 h-5" />
               </Link>
             </Button>
           </motion.div>

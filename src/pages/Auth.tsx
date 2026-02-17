@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Logo } from "@/components/Logo";
 
 type AuthStep = "email" | "pin" | "create-pin" | "confirm-pin" | "verify-email" | "reset-pin" | "new-pin" | "confirm-new-pin";
 
@@ -217,9 +218,7 @@ const Auth = () => {
         {/* Logo */}
         <div className="text-center space-y-2">
           <Link to="/" className="inline-flex items-center gap-2 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-hero flex items-center justify-center">
-              <Shield className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <Logo size="lg"/>
             <span className="font-display text-2xl font-bold text-foreground">Surer</span>
           </Link>
           <h1 className="font-display text-2xl font-bold text-foreground">
