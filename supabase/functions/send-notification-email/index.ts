@@ -6,6 +6,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// TODO: Replace with your verified domain sender when you verify on Resend
+const FROM_EMAIL = "Surer <onboarding@resend.dev>";
+// TODO: Replace with your production domain
+const APP_URL = "https://surer.lovable.app";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -27,7 +32,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch receipt
     const { data: receipt } = await supabaseAdmin
       .from("receipts")
       .select("*")
@@ -41,7 +45,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get sender and receiver emails
     const { data: sender } = await supabaseAdmin.auth.admin.getUserById(receipt.sender_id);
     const senderEmail = sender?.user?.email || "";
     const receiverEmail = receipt.receiver_email;
@@ -79,7 +82,7 @@ Deno.serve(async (req) => {
           <p style="${textStyle}"><strong>From:</strong> ${senderEmail}</p>
           <p style="${textStyle}">Log in to Surer to view and manage this receipt.</p>
           <p style="text-align: center; margin-top: 24px;">
-            <a href="https://surer.lovable.app/dashboard" style="${btnStyle}">View on Surer</a>
+            <a href="${APP_URL}/dashboard" style="${btnStyle}">View on Surer</a>
           </p>
         </div>`,
       },
@@ -91,7 +94,7 @@ Deno.serve(async (req) => {
           <p style="${textStyle}">The payment of ${formatNaira(receipt.amount)} for "${receipt.description}" has been confirmed and is now held safely in escrow.</p>
           <p style="${textStyle}">Both parties can now make decisions on this receipt.</p>
           <p style="text-align: center; margin-top: 24px;">
-            <a href="https://surer.lovable.app/receipt/${receipt.id}" style="${btnStyle}">View Receipt</a>
+            <a href="${APP_URL}/receipt/${receipt.id}" style="${btnStyle}">View Receipt</a>
           </p>
         </div>`,
       },
@@ -103,9 +106,9 @@ Deno.serve(async (req) => {
           <p style="${textStyle}"><strong>Receipt:</strong> ${receipt.description} (${formatNaira(receipt.amount)})</p>
           <p style="${textStyle}"><strong>Decision:</strong> <span style="${badgeStyle} background: #e0f2e9; color: #2a6a4a;">${decisionLabels[decision] || decision}</span></p>
           ${reason ? `<p style="${textStyle}"><strong>Reason:</strong> "${reason}"</p>` : ""}
-          <p style="${textStyle}">You have 2 days to respond before this decision is auto-executed.</p>
+          <p style="${textStyle}">You have at least <strong>48 hours</strong> to respond before this decision is auto-executed.</p>
           <p style="text-align: center; margin-top: 24px;">
-            <a href="https://surer.lovable.app/receipt/${receipt.id}" style="${btnStyle}">Respond Now</a>
+            <a href="${APP_URL}/receipt/${receipt.id}" style="${btnStyle}">Respond Now</a>
           </p>
         </div>`,
       },
@@ -117,7 +120,7 @@ Deno.serve(async (req) => {
           <p style="${textStyle}">A dispute has been raised on "${receipt.description}" (${formatNaira(receipt.amount)}).</p>
           <p style="${textStyle}">You have <strong>4 days</strong> to resolve this before it escalates to admin review.</p>
           <p style="text-align: center; margin-top: 24px;">
-            <a href="https://surer.lovable.app/receipt/${receipt.id}" style="${btnStyle}">View Dispute</a>
+            <a href="${APP_URL}/receipt/${receipt.id}" style="${btnStyle}">View Dispute</a>
           </p>
         </div>`,
       },
@@ -136,19 +139,11 @@ Deno.serve(async (req) => {
         html: `<div style="${baseStyle}">
           <h2 style="${headerStyle}">Receipt Completed ✅</h2>
           <p style="${textStyle}">The receipt "${receipt.description}" (${formatNaira(receipt.amount)}) has been resolved and completed.</p>
-          <p style="${textStyle}">Funds are being processed according to the final decision.</p>
+          <p style="${textStyle}"><strong>Decision:</strong> ${decisionLabels[decision] || decision || "Settled"}</p>
+          <p style="${textStyle}">Funds are being settled directly to bank accounts via Payscrow.</p>
           <p style="text-align: center; margin-top: 24px;">
-            <a href="https://surer.lovable.app/receipt/${receipt.id}" style="${btnStyle}">View Outcome</a>
+            <a href="${APP_URL}/receipt/${receipt.id}" style="${btnStyle}">View Outcome</a>
           </p>
-        </div>`,
-      },
-      withdrawal_success: {
-        subject: `💰 Withdrawal Processed`,
-        to: [receiverEmail],
-        html: `<div style="${baseStyle}">
-          <h2 style="${headerStyle}">Withdrawal Processed! 💰</h2>
-          <p style="${textStyle}">Your withdrawal for receipt "${receipt.description}" has been processed.</p>
-          <p style="${textStyle}">Funds should arrive in your bank account shortly.</p>
         </div>`,
       },
     };
@@ -161,7 +156,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Send via Resend
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -169,7 +163,7 @@ Deno.serve(async (req) => {
         Authorization: `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: "Surer <onboarding@resend.dev>",
+        from: FROM_EMAIL,
         to: template.to.filter(Boolean),
         subject: template.subject,
         html: template.html,

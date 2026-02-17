@@ -28,10 +28,7 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -46,7 +43,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Fetch receipt
     const { data: receipt, error: receiptError } = await supabaseAdmin
       .from("receipts")
       .select("*")
@@ -60,92 +56,36 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify user is the sender
     if (receipt.sender_id !== user.id) {
-      return new Response(
-        JSON.stringify({ error: "Only the sender can pay" }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Only the sender can pay" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Get sender profile
     const { data: senderProfile } = await supabaseAdmin
       .from("profiles")
       .select("*")
       .eq("id", user.id)
       .single();
 
-    // Get admin user for platform fee settlement
-    const { data: adminRole } = await supabaseAdmin
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "admin")
-      .limit(1)
-      .maybeSingle();
-
-    let adminProfile: any = null;
-    if (adminRole) {
-      const { data } = await supabaseAdmin
-        .from("profiles")
-        .select("*")
-        .eq("id", adminRole.user_id)
-        .single();
-      adminProfile = data;
-    }
-
-    // Get receiver profile for settlement account
-    const { data: receiverProfile } = await supabaseAdmin
-      .from("profiles")
-      .select("*")
-      .eq("email", receipt.receiver_email)
-      .maybeSingle();
-
     const payscrowApiKey = Deno.env.get("PAYSCROW_BROKER_API_KEY");
     if (!payscrowApiKey) {
-      return new Response(
-        JSON.stringify({ error: "Payscrow not configured" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Payscrow not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const transactionRef = `SURER-${receipt.id.slice(0, 8)}-${Date.now()}`;
     const origin = req.headers.get("origin") || "https://surer.com.ng";
 
-    // Build settlement accounts array
-    // Total settlement must equal total item amount (receipt.amount + surer_fee)
-    const settlementAccounts: any[] = [];
+    // Calculate total: item amount + surer fee (1.5%)
+    // DO NOT include settlementAccounts here — we settle at the END via /broker/settle
     const surerFee = receipt.surer_fee || 0;
-    const receiverAmount = receipt.amount;
+    const totalItemPrice = receipt.amount + surerFee;
 
-    // Admin settlement for Surer platform fee (1.5%)
-    if (adminProfile?.bank_code && adminProfile?.account_number && adminProfile?.account_name && surerFee > 0) {
-      settlementAccounts.push({
-        bankCode: adminProfile.bank_code,
-        accountNumber: adminProfile.account_number,
-        accountName: adminProfile.account_name,
-        amount: surerFee,
-      });
-    }
-
-    // Receiver settlement for the transaction amount
-    if (receiverProfile?.bank_code && receiverProfile?.account_number && receiverProfile?.account_name) {
-      settlementAccounts.push({
-        bankCode: receiverProfile.bank_code,
-        accountNumber: receiverProfile.account_number,
-        accountName: receiverProfile.account_name,
-        amount: receiverAmount,
-      });
-    }
-
-    // If we couldn't build settlement accounts (missing bank details), skip them
-    // Payscrow will settle to merchant account by default
-    const requestBody: any = {
+    const requestBody = {
       transactionReference: transactionRef,
       merchantEmailAddress: receipt.receiver_email,
       merchantName: receipt.receiver_email.split("@")[0],
@@ -162,19 +102,13 @@ Deno.serve(async (req) => {
           name: receipt.description,
           description: receipt.description,
           quantity: 1,
-          price: receiverAmount + surerFee,
+          price: totalItemPrice,
         },
       ],
+      // NO settlementAccounts — money stays fluid in escrow until /broker/settle is called
     };
 
-    // Only add settlement accounts if we have valid entries that cover the full amount
-    const totalSettlement = settlementAccounts.reduce((sum: number, a: any) => sum + a.amount, 0);
-    if (settlementAccounts.length > 0 && Math.abs(totalSettlement - (receiverAmount + surerFee)) < 1) {
-      requestBody.settlementAccounts = settlementAccounts;
-      console.log("Settlement accounts configured:", JSON.stringify(settlementAccounts));
-    } else if (settlementAccounts.length > 0) {
-      console.log("Settlement accounts skipped - total mismatch:", totalSettlement, "vs", receiverAmount + surerFee);
-    }
+    console.log("Creating Payscrow payment (no pre-settlement):", JSON.stringify(requestBody));
 
     const payscrowResponse = await fetch(
       `${PAYSCROW_API_BASE}/transactions/start`,
