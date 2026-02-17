@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     // ============================================================
     // 1. AUTO-EXECUTE: Active receipts with a decision past 2-day timer
     // If one party made a decision and 2 days passed with no counter-response,
-    // execute the existing decision automatically.
+    // execute the existing decision automatically via /broker/settle.
     // ============================================================
     const { data: activeReceipts } = await supabaseAdmin
       .from("receipts")
@@ -41,8 +41,14 @@ Deno.serve(async (req) => {
         if (receipt.sender_decision && !receipt.receiver_decision) {
           // Sender made a decision, receiver didn't respond in 2 days
           // Execute the sender's decision as-is
-          decision = receipt.sender_decision;
-          amount = receipt.sender_decision_amount;
+          if (receipt.sender_decision === "release_all") {
+            decision = "release_all";
+          } else if (receipt.sender_decision === "release_specific") {
+            decision = "release_specific";
+            amount = receipt.sender_decision_amount;
+          } else if (receipt.sender_decision === "refund") {
+            decision = "refund";
+          }
         } else if (receipt.receiver_decision && !receipt.sender_decision) {
           // Receiver clicked "delivered" (4), sender didn't respond in 2 days
           // Auto-release full payment to receiver
@@ -52,6 +58,8 @@ Deno.serve(async (req) => {
           // Both made decisions but somehow not resolved - skip
           continue;
         }
+
+        if (!decision) continue;
 
         console.log(`Auto-executing receipt ${receipt.id}: decision=${decision}, amount=${amount}`);
 
@@ -73,7 +81,12 @@ Deno.serve(async (req) => {
           );
           const releaseData = await releaseRes.json();
           console.log(`Release result for ${receipt.id}:`, JSON.stringify(releaseData));
-          autoExecuted++;
+
+          if (releaseRes.ok && releaseData.success) {
+            autoExecuted++;
+          } else {
+            console.error(`Release failed for ${receipt.id}:`, JSON.stringify(releaseData));
+          }
         } catch (e) {
           console.error("Release call failed for receipt:", receipt.id, e);
         }

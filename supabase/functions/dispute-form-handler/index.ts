@@ -6,7 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PAYSCROW_API_BASE = "https://api.payscrow.net/api/v3/marketplace";
+// IMPORTANT: We do NOT call Payscrow's raise-dispute API.
+// Disputes are handled locally by Surer. Money stays "In Progress" on Payscrow
+// so that the /broker/settle command works when a final decision is made.
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -56,9 +58,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create dispute in our DB
-    const expiresAt = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(); // 4 days
-    const autoExecuteAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(); // 2 days
+    // Create dispute in our DB (local only — NO Payscrow API call)
+    const expiresAt = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString();
+    const autoExecuteAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: dispute, error: disputeError } = await supabaseAdmin
       .from("disputes")
@@ -82,38 +84,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Update receipt status
+    // Update receipt status to dispute
     await supabaseAdmin
       .from("receipts")
       .update({ status: "dispute" })
       .eq("id", receiptId);
 
-    // Raise dispute on Payscrow if transaction exists
-    if (receipt.payscrow_transaction_number) {
-      const payscrowApiKey = Deno.env.get("PAYSCROW_BROKER_API_KEY");
-      if (payscrowApiKey) {
-        try {
-          await fetch(
-            `${PAYSCROW_API_BASE}/transactions/${receipt.payscrow_transaction_number}/broker/raise-dispute`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "BrokerApiKey": payscrowApiKey,
-              },
-              body: JSON.stringify({
-                requestedBy: receipt.sender_id === user.id ? "customer" : "merchant",
-                complaint: reason,
-              }),
-            }
-          );
-        } catch (e) {
-          console.error("Failed to raise Payscrow dispute:", e);
-        }
-      }
-    }
-
-    // Send notification
+    // Send notification to both parties
     try {
       await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-notification-email`, {
         method: "POST",

@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
 
     const transactionNumber = receipt.payscrow_transaction_number;
 
-    // If no Payscrow transaction exists (dev/test), just update local status
+    // If no Payscrow transaction (dev/test), just update local status
     if (!transactionNumber) {
       console.log("No Payscrow transaction for receipt:", receiptId, "- updating local status only");
       await supabaseAdmin.from("receipts").update({
@@ -59,93 +59,163 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Step 1: Check current Payscrow transaction status
-    let payscrowStatus: any = null;
-    try {
-      const statusRes = await fetch(
-        `${PAYSCROW_API_BASE}/transactions/${transactionNumber}/status`,
-        { headers: { BrokerApiKey: payscrowApiKey } }
-      );
-      payscrowStatus = await statusRes.json();
-      console.log("Payscrow status:", JSON.stringify(payscrowStatus));
-    } catch (e) {
-      console.error("Failed to get Payscrow status:", e);
+    // ============================================================
+    // FETCH ALL REQUIRED BANK DETAILS
+    // ============================================================
+
+    // Admin profile (for 1.5% platform fee)
+    const { data: adminRole } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "admin")
+      .limit(1)
+      .maybeSingle();
+
+    let adminProfile: any = null;
+    if (adminRole) {
+      const { data } = await supabaseAdmin
+        .from("profiles")
+        .select("*")
+        .eq("id", adminRole.user_id)
+        .single();
+      adminProfile = data;
     }
 
-    // Step 2: Raise dispute on Payscrow to communicate our settlement decision
-    // This is how brokers tell Payscrow what to do with the escrowed funds
-    let complaint = "";
-    let requestedBy = "customer"; // Default: customer (sender) perspective
+    // Sender profile
+    const { data: senderProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("id", receipt.sender_id)
+      .single();
 
-    const releaseAmt = amount || receipt.sender_decision_amount || 0;
-    const refundAmt = receipt.amount - releaseAmt;
+    // Receiver profile
+    const { data: receiverProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("email", receipt.receiver_email)
+      .maybeSingle();
 
-    switch (decision) {
-      case "release_all":
-        // Full release to merchant (receiver)
-        complaint = `BROKER SETTLEMENT DECISION: Release full escrow amount of ${receipt.amount} NGN to the merchant (receiver). ` +
-          `Transaction ref: ${receipt.payscrow_transaction_ref}. ` +
-          `Both parties have agreed to full release. Please settle the full amount to the merchant's settlement account as configured.`;
-        requestedBy = "customer"; // Customer requesting release to merchant
-        break;
+    // ============================================================
+    // BUILD SETTLEMENT ARRAY
+    // ============================================================
+    const adminFee = receipt.surer_fee || Math.round(receipt.amount * 0.015 * 100) / 100;
+    const baseAmount = receipt.amount; // The actual transaction amount (excluding admin fee)
+    const settlements: any[] = [];
 
-      case "release_specific":
-        // Partial: specific amount to merchant, remainder refunded to customer
-        complaint = `BROKER SETTLEMENT DECISION: Partial settlement required. ` +
-          `Release ${releaseAmt} NGN to the merchant (receiver) and refund ${refundAmt} NGN to the customer (sender). ` +
-          `Transaction ref: ${receipt.payscrow_transaction_ref}. ` +
-          `Reason: ${receipt.sender_decision_reason || "Partial delivery or mutual agreement"}.`;
-        requestedBy = "customer";
-        break;
-
-      case "refund":
-        // Full refund to customer (sender)
-        complaint = `BROKER SETTLEMENT DECISION: Full refund of ${receipt.amount} NGN to the customer (sender). ` +
-          `No payment to merchant. Transaction ref: ${receipt.payscrow_transaction_ref}. ` +
-          `Reason: ${receipt.sender_decision_reason || "Non-delivery or agreement to refund"}.`;
-        requestedBy = "customer";
-        break;
-
-      default:
-        complaint = `BROKER SETTLEMENT DECISION: ${decision} for transaction ${receipt.payscrow_transaction_ref}. Amount: ${amount || receipt.amount} NGN.`;
-    }
-
-    // Raise dispute on Payscrow if transaction is in escrow and eligible
-    const canRaiseDispute = payscrowStatus?.data?.inEscrow === true &&
-      payscrowStatus?.data?.inDispute === false &&
-      payscrowStatus?.data?.statusId === 2; // In Progress
-
-    let disputeRaised = false;
-
-    if (canRaiseDispute) {
-      try {
-        const disputeRes = await fetch(
-          `${PAYSCROW_API_BASE}/transactions/${transactionNumber}/broker/raise-dispute`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              BrokerApiKey: payscrowApiKey,
-            },
-            body: JSON.stringify({ requestedBy, complaint }),
-          }
-        );
-        const disputeData = await disputeRes.json();
-        console.log("Payscrow dispute raised:", JSON.stringify(disputeData));
-        disputeRaised = disputeRes.ok && disputeData.success;
-
-        if (!disputeRes.ok) {
-          console.error("Payscrow dispute raise failed:", JSON.stringify(disputeData));
-        }
-      } catch (e) {
-        console.error("Failed to raise Payscrow dispute:", e);
-      }
+    // 1. Always pay the Admin their 1.5% platform fee
+    if (adminProfile?.bank_code && adminProfile?.account_number && adminProfile?.account_name) {
+      settlements.push({
+        bankCode: adminProfile.bank_code,
+        accountNumber: adminProfile.account_number,
+        accountName: adminProfile.account_name,
+        amount: adminFee,
+      });
     } else {
-      console.log("Cannot raise dispute on Payscrow - status:", JSON.stringify(payscrowStatus?.data));
-      // If already in dispute or finalized, we still update local status
+      console.warn("Admin bank details not configured! Platform fee cannot be settled.");
     }
 
-    // Step 3: Update local receipt status to completed
+    // 2. Decision-based fund distribution
+    if (decision === "release_all") {
+      // Full release to receiver
+      if (!receiverProfile?.bank_code || !receiverProfile?.account_number) {
+        console.error("Receiver bank details missing for settlement");
+        return new Response(JSON.stringify({ error: "Receiver bank details not set. Cannot settle." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      settlements.push({
+        bankCode: receiverProfile.bank_code,
+        accountNumber: receiverProfile.account_number,
+        accountName: receiverProfile.account_name || receiverProfile.display_name || "Receiver",
+        amount: baseAmount,
+      });
+    } else if (decision === "refund") {
+      // Full refund to sender
+      if (!senderProfile?.bank_code || !senderProfile?.account_number) {
+        console.error("Sender bank details missing for refund");
+        return new Response(JSON.stringify({ error: "Sender bank details not set. Cannot refund." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      settlements.push({
+        bankCode: senderProfile.bank_code,
+        accountNumber: senderProfile.account_number,
+        accountName: senderProfile.account_name || senderProfile.display_name || "Sender",
+        amount: baseAmount,
+      });
+    } else if (decision === "release_specific") {
+      // Partial: specific amount to receiver, remainder to sender
+      const releaseAmt = amount || receipt.sender_decision_amount || 0;
+      const refundAmt = baseAmount - releaseAmt;
+
+      if (releaseAmt > 0) {
+        if (!receiverProfile?.bank_code || !receiverProfile?.account_number) {
+          return new Response(JSON.stringify({ error: "Receiver bank details not set. Cannot settle partial." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        settlements.push({
+          bankCode: receiverProfile.bank_code,
+          accountNumber: receiverProfile.account_number,
+          accountName: receiverProfile.account_name || "Receiver",
+          amount: releaseAmt,
+        });
+      }
+
+      if (refundAmt > 0) {
+        if (!senderProfile?.bank_code || !senderProfile?.account_number) {
+          return new Response(JSON.stringify({ error: "Sender bank details not set. Cannot refund remainder." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        settlements.push({
+          bankCode: senderProfile.bank_code,
+          accountNumber: senderProfile.account_number,
+          accountName: senderProfile.account_name || "Sender",
+          amount: refundAmt,
+        });
+      }
+    }
+
+    console.log("Settlement array:", JSON.stringify(settlements));
+
+    // ============================================================
+    // CALL PAYSCROW /broker/settle
+    // ============================================================
+    const settleRes = await fetch(
+      `${PAYSCROW_API_BASE}/transactions/${transactionNumber}/broker/settle`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          BrokerApiKey: payscrowApiKey,
+        },
+        body: JSON.stringify({ settlements }),
+      }
+    );
+
+    const settleData = await settleRes.json();
+    console.log("Payscrow settle response:", JSON.stringify(settleData));
+
+    if (!settleRes.ok || !settleData.success) {
+      const errorMsg = settleData.message || settleData.errors || "Settlement failed on Payscrow";
+      console.error("Payscrow settle failed:", JSON.stringify(settleData));
+      return new Response(JSON.stringify({ 
+        error: `Settlement failed: ${typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)}`,
+        payscrowResponse: settleData,
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ============================================================
+    // UPDATE LOCAL DB
+    // ============================================================
     await supabaseAdmin
       .from("receipts")
       .update({
@@ -154,21 +224,19 @@ Deno.serve(async (req) => {
       })
       .eq("id", receiptId);
 
-    // Step 4: Clean up disputes and evidence
+    // Clean up disputes and evidence
     await cleanupDisputes(supabaseAdmin, receiptId);
 
-    // Step 5: Send completion notification
+    // Send completion notification
     await sendCompletionNotification(receiptId, decision);
 
     return new Response(
       JSON.stringify({
         success: true,
         decision,
-        payscrowDisputeRaised: disputeRaised,
+        settlements: settlements.length,
         transactionNumber,
-        message: disputeRaised
-          ? "Decision submitted to Payscrow for settlement processing."
-          : "Decision recorded locally. Payscrow settlement may require manual follow-up.",
+        message: "Settlement executed via Payscrow. Funds being sent to bank accounts.",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -189,7 +257,6 @@ async function cleanupDisputes(supabaseAdmin: any, receiptId: string) {
 
   if (disputes && disputes.length > 0) {
     for (const d of disputes) {
-      // Delete evidence files from storage
       const { data: evidenceFiles } = await supabaseAdmin
         .from("evidence")
         .select("file_path")
