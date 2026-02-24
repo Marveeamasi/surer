@@ -2,7 +2,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Shield, Zap, Users, MessageSquare, ArrowRight, CheckCircle, Smartphone, HeartHandshake } from "lucide-react";
+import { Shield, Zap, Users, MessageSquare, ArrowRight, CheckCircle, Smartphone, HeartHandshake, ArrowDownRight } from "lucide-react";
 import { motion } from "framer-motion";
 import heroIllustration from "@/assets/hero.avif";
 import { Logo } from "@/components/Logo";
@@ -55,19 +55,19 @@ const Index = () => {
             <motion.div {...fadeUp} className="space-y-6 max-md:order-2 max-sm:px-4">
               <h1 className="font-display text-4xl md:text-6xl max-sm:text-center font-extrabold leading-tight text-foreground">
                 Pay anyone.{" "}
-                <span className="text-gradient-hero">Stay in control.</span>
+                <span className="text-gradient-animated">Stay in control.</span>
               </h1>
               <p className="text-lg text-muted-foreground max-w-lg max-sm:text-center">
-                Your money is only released when you're satisfied. Safe online payments built for everyday Nigerians: freelancers, vendors, artisans, and you.
+                Safe online payments built for everyday Nigerians: freelancers, vendors, artisans, and You.
               </p>
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
                 <Button variant="hero" size="xl" asChild>
                   <Link to="/auth">
                    Pay Someone Now <ArrowRight className="w-5 h-5" />
                   </Link>
                 </Button>
                 <Button variant="hero-outline" size="xl" asChild>
-                  <Link to="#how-it-works">See How It Works</Link>
+                  <a href="#how-it-works">See How It Works <ArrowDownRight className="w-5 h-5" /></a>
                 </Button>
               </div>
             </motion.div>
@@ -91,7 +91,7 @@ const Index = () => {
               <img
                 src={heroIllustration}
                 alt="Surer - Safe payments for Nigerians"
-                className="relative rounded-3xl shadow-elevated w-full"
+                className="relative rounded-3xl aspect-[3/2] shadow-elevated w-full"
                 loading="lazy"
                 decoding="async"
               />
@@ -186,7 +186,7 @@ const Index = () => {
         <div className="container mx-auto max-w-2xl">
           <motion.div {...fadeUp} className="text-center mb-8">
             <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3">
-              Clear, honest pricing
+              Just small fee for protecting you money and giving you control
             </h2>
             <p className="text-muted-foreground">No hidden charges. Ever.</p>
           </motion.div>
@@ -204,7 +204,7 @@ const Index = () => {
               </div>
               <div className="flex justify-between items-center py-3">
                 <div>
-                  <p className="font-semibold text-foreground">Processing Fee (Payscrow)</p>
+                  <p className="font-semibold text-foreground">Transaction Fee (Payscrow)</p>
                   <p className="text-sm text-muted-foreground">Secure payment processing</p>
                 </div>
                 <div className="text-right">

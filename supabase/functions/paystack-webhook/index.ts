@@ -84,14 +84,15 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
 
-      // Store spam fee payment record in receipts table via a dedicated column
-      // or use a simple approach: update the receipt to mark spam fee as paid
-      // We'll store the reference so the frontend can verify
+      // Store spam fee payment record in receipts table.
+      // We added explicit columns during migration so we can future‑proof logic.
       const { error: updateError } = await supabaseAdmin
         .from("receipts")
         .update({
-          // Use updated_at as a signal that something changed
-          updated_at: new Date().toISOString(),
+          spam_fee_paid: true,
+          spam_fee_reference: eventData.reference,
+          spam_fee_decision: metadata.decision_type || null,
+          spam_fee_amount: (verifyData.data.amount || 0) / 100,
         })
         .eq("id", metadata.receipt_id);
 

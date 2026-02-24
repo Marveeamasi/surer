@@ -24,6 +24,8 @@ const Settings = () => {
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
   const [fingerprintEnabled, setFingerprintEnabled] = useState(false);
+  // raw JSON string of registered WebAuthn credential {id, type}
+  const [webauthnCred, setWebauthnCred] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
@@ -56,6 +58,7 @@ const Settings = () => {
         setAccountNumber(data.account_number || "");
         setAccountName(data.account_name || "");
         setFingerprintEnabled(data.fingerprint_enabled || false);
+        setWebauthnCred(data.webauthn_credential || null);
       }
       setLoadingProfile(false);
     };
@@ -64,6 +67,10 @@ const Settings = () => {
 
   const executeSave = async () => {
     if (!user) return;
+    if (fingerprintEnabled && !webauthnCred) {
+      toast.error("Please register your fingerprint before saving");
+      return;
+    }
     setSaving(true);
     const selectedBank = NIGERIAN_BANKS.find((b) => b.code === bankCode);
     const { error } = await db
@@ -74,6 +81,7 @@ const Settings = () => {
         account_number: accountNumber || null,
         account_name: accountName || null,
         fingerprint_enabled: fingerprintEnabled,
+        webauthn_credential: fingerprintEnabled ? webauthnCred : null,
       })
       .eq("id", user.id);
     setSaving(false);
@@ -82,6 +90,10 @@ const Settings = () => {
   };
 
   const handleSave = () => {
+    if (fingerprintEnabled && !webauthnCred) {
+      toast.error("Please register your fingerprint before saving");
+      return;
+    }
     requirePin("Confirm Changes", "Enter your PIN to save your settings.", executeSave);
   };
 
@@ -116,6 +128,68 @@ const Settings = () => {
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
+  };
+
+  // Helpers for converting between base64 and Uint8Array
+  const bufToBase64 = (buffer: ArrayBuffer) => {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    bytes.forEach((b) => (binary += String.fromCharCode(b)));
+    return btoa(binary);
+  };
+  const base64ToBuf = (b64: string): Uint8Array => {
+    const binary = atob(b64);
+    const len = binary.length;
+    const buf = new Uint8Array(len);
+    for (let i = 0; i < len; i++) buf[i] = binary.charCodeAt(i);
+    return buf;
+  };
+
+  const handleFingerprintToggle = async (enabled: boolean) => {
+    if (!user) return;
+    if (enabled) {
+      if (!window.PublicKeyCredential) {
+        toast.error("Biometrics not supported on this device");
+        return;
+      }
+      try {
+        // create new credential
+        const challenge = new Uint8Array(32);
+        window.crypto.getRandomValues(challenge);
+        const options: any = {
+          publicKey: {
+            challenge,
+            rp: { name: "Surer" },
+            user: {
+              id: new TextEncoder().encode(user.id),
+              name: user.email || "",
+              displayName: user.email || "",
+            },
+            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+            timeout: 60000,
+            authenticatorSelection: { userVerification: "required" },
+            attestation: "none",
+          },
+        };
+        const cred: any = await navigator.credentials.create(options);
+        if (cred) {
+          const rawId = bufToBase64(cred.rawId as ArrayBuffer);
+          const credObj = { id: rawId, type: cred.type };
+          setWebauthnCred(JSON.stringify(credObj));
+          setFingerprintEnabled(true);
+          toast.success("Fingerprint credential created. Remember to save settings.");
+        }
+      } catch (e) {
+        console.error("WebAuthn register error", e);
+        toast.error("Failed to register fingerprint");
+        setFingerprintEnabled(false);
+      }
+    } else {
+      // disabling
+      setFingerprintEnabled(false);
+      setWebauthnCred(null);
+      toast.success("Fingerprint authentication disabled");
+    }
   };
 
   return (
@@ -189,7 +263,7 @@ const Settings = () => {
                   <p className="text-xs text-muted-foreground">Use biometrics instead of PIN (mobile only)</p>
                 </div>
               </div>
-              <Switch checked={fingerprintEnabled} onCheckedChange={setFingerprintEnabled} />
+              <Switch checked={fingerprintEnabled} onCheckedChange={handleFingerprintToggle} />
             </div>
 
             {/* Bank details */}

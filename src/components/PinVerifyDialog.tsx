@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,21 @@ import { Eye, EyeOff, Fingerprint, Loader2, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+
+// helpers for base64 <-> Uint8Array conversions
+const bufToBase64 = (buffer: ArrayBuffer) => {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary);
+};
+const base64ToBuf = (b64: string): Uint8Array => {
+  const binary = atob(b64);
+  const len = binary.length;
+  const buf = new Uint8Array(len);
+  for (let i = 0; i < len; i++) buf[i] = binary.charCodeAt(i);
+  return buf;
+};
 
 interface PinVerifyDialogProps {
   open: boolean;
@@ -26,6 +41,7 @@ const PinVerifyDialog = ({
   const [pin, setPin] = useState("");
   const [showPin, setShowPin] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [hasCredential, setHasCredential] = useState(false);
   const [useBiometric, setUseBiometric] = useState(false);
 
   const handleVerifyPin = async (e: React.FormEvent) => {
@@ -62,21 +78,45 @@ const PinVerifyDialog = ({
 
     try {
       setVerifying(true);
-      // Use WebAuthn for biometric verification
-      const credential = await navigator.credentials.get({
+
+      // fetch stored credential from profile
+      const { data } = await supabase
+        .from("profiles")
+        .select("webauthn_credential")
+        .eq("id", user?.id)
+        .single();
+
+      const raw = data?.webauthn_credential;
+      if (!raw) {
+        toast.error("No biometric credential registered");
+        setVerifying(false);
+        return;
+      }
+
+      const credObj = JSON.parse(raw);
+      const allow = [
+        {
+          id: base64ToBuf(credObj.id) as unknown as BufferSource,
+          type: credObj.type,
+        },
+      ];
+
+      const assertion = await navigator.credentials.get({
         publicKey: {
           challenge: new Uint8Array(32),
           timeout: 60000,
           userVerification: "required",
           rpId: window.location.hostname,
+          allowCredentials: allow,
         },
       });
 
-      if (credential) {
+      if (assertion) {
         onOpenChange(false);
         onVerified();
       }
-    } catch {
+    } catch (err) {
+      console.error("Biometric verify error", err);
       toast.error("Biometric verification failed or cancelled");
     }
     setVerifying(false);
@@ -89,6 +129,28 @@ const PinVerifyDialog = ({
     }
     onOpenChange(isOpen);
   };
+
+  // fetch profile to see if biometric credential exists
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("webauthn_credential")
+          .eq("id", user.id)
+          .single();
+        if (data?.webauthn_credential) setHasCredential(true);
+      } catch {}
+    })();
+  }, [user]);
+
+  // if dialog opens and we have a stored credential, prompt immediately
+  useEffect(() => {
+    if (open && hasCredential) {
+      handleBiometric();
+    }
+  }, [open, hasCredential]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -137,16 +199,18 @@ const PinVerifyDialog = ({
           </Button>
         </form>
 
-        {/* Biometric option */}
-        <button
-          type="button"
-          onClick={handleBiometric}
-          disabled={verifying}
-          className="flex items-center justify-center gap-2 w-full py-3 text-sm text-primary hover:text-primary/80 transition-colors"
-        >
-          <Fingerprint className="w-5 h-5" />
-          Use Fingerprint
-        </button>
+        {/* Biometric option (show only if credential exists) */}
+        {hasCredential && (
+          <button
+            type="button"
+            onClick={handleBiometric}
+            disabled={verifying}
+            className="flex items-center justify-center gap-2 w-full py-3 text-sm text-primary hover:text-primary/80 transition-colors"
+          >
+            <Fingerprint className="w-5 h-5" />
+            Use Fingerprint
+          </button>
+        )}
       </DialogContent>
     </Dialog>
   );

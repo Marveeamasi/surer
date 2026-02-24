@@ -78,28 +78,52 @@ const ReceiptView = () => {
     setLoading(false);
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchReceipt();
   }, [id]);
 
   // Resume pending decision after Paystack spam fee callback
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const ref = searchParams.get("reference") || searchParams.get("trxref");
-    if (ref && receipt) {
-      const pendingStr = sessionStorage.getItem("pending_decision");
-      if (pendingStr) {
-        const pending = JSON.parse(pendingStr);
-        if (pending.receiptId === receipt.id) {
-          sessionStorage.removeItem("pending_decision");
-          toast.success("Fee paid! Submitting your decision...");
-          submitDecision(pending.type, pending.reason, pending.amount);
+    const handleRedirect = async () => {
+      const ref = searchParams.get("reference") || searchParams.get("trxref");
+      if (ref && receipt) {
+        const pendingStr = sessionStorage.getItem("pending_decision");
+        if (pendingStr) {
+          const pending = JSON.parse(pendingStr);
+          if (pending.receiptId === receipt.id) {
+            // verify spam fee server‑side before finalizing the action
+            try {
+              const { data, error } = await supabase.functions.invoke("paystack-verify-spam-fee", {
+                body: { reference: ref, receiptId: receipt.id },
+              });
+
+              if (error || !data?.success) {
+                // If verification fails we'll still allow the user to retry
+                toast.error("Unable to verify fee payment. Please try again.");
+                return;
+              }
+
+              sessionStorage.removeItem("pending_decision");
+              toast.success("Fee paid! Submitting your decision...");
+              submitDecision(pending.type, pending.reason, pending.amount);
+              window.history.replaceState({}, "", `/receipt/${id}`);
+            } catch (e) {
+              console.error("Spam fee verify error", e);
+              toast.error("Error verifying fee payment");
+            }
+          }
+        } else {
+          // no pending decision but might have just paid the fee via redirect
+          // refresh receipt state in case webhook/verify updated it
+          await fetchReceipt();
           window.history.replaceState({}, "", `/receipt/${id}`);
         }
-      } else {
-        // Just clean the URL if no pending decision
-        window.history.replaceState({}, "", `/receipt/${id}`);
       }
-    }
+    };
+
+    handleRedirect();
   }, [searchParams, receipt]);
 
   const isSender = receipt?.sender_id === user?.id;
@@ -254,6 +278,20 @@ const ReceiptView = () => {
     setSubmittingDecision(true);
     const isSenderDecision = isSender;
 
+    // if this decision requires a spam fee ensure it has been paid
+    if (needsSpamFee(type)) {
+      const { data: rec, error: feeErr } = await db
+        .from("receipts")
+        .select("spam_fee_paid, spam_fee_decision")
+        .eq("id", receipt.id)
+        .maybeSingle();
+      if (feeErr || !rec?.spam_fee_paid || rec.spam_fee_decision !== type) {
+        toast.error("Anti‑spam fee not found or mismatched. Please complete payment first.");
+        setSubmittingDecision(false);
+        return;
+      }
+    }
+
     try {
       const updateData: any = {};
 
@@ -389,11 +427,18 @@ const ReceiptView = () => {
     e.preventDefault();
 
     if (needsSpamFee(decisionType)) {
+      // if fee already paid (and recorded) we can bypass Paystack
+      if (receipt.spam_fee_paid && receipt.spam_fee_decision === decisionType) {
+        requirePin("Confirm Decision", "Enter your PIN to submit this decision.", () => {
+          submitDecision(decisionType, decisionReason, decisionAmount);
+        });
+        return;
+      }
+
       requirePin("Confirm Decision", "Enter your PIN to pay the anti-spam fee and submit your decision.", async () => {
         try {
           const { data, error } = await supabase.functions.invoke("paystack-initialize-spam-fee", {
             body: {
-              amount: getSpamFee(),
               callbackUrl: `${window.location.origin}/receipt/${receipt.id}`,
               receiptId: receipt.id,
               decisionType,
@@ -444,10 +489,10 @@ const ReceiptView = () => {
           <CheckCircle className="w-5 h-5" /> Release Full Payment
         </Button>
         <Button variant="outline" size="lg" className="w-full" onClick={() => startDecision("release_specific")}>
-          <Send className="w-5 h-5" /> Release Specific Amount (₦{getSpamFee().toLocaleString()} fee)
+          <Send className="w-5 h-5" /> Release Specific Amount {receipt.spam_fee_paid && receipt.spam_fee_decision === "release_specific" ? "(fee paid)" : `(₦${getSpamFee().toLocaleString()} fee)`}\\
         </Button>
-        <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("refund")}>
-          <XCircle className="w-5 h-5" /> Request Full Refund (₦{getSpamFee().toLocaleString()} fee)
+        <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("refund")}>\
+          <XCircle className="w-5 h-5" /> Request Full Refund {receipt.spam_fee_paid && receipt.spam_fee_decision === "refund" ? "(fee paid)" : `(₦${getSpamFee().toLocaleString()} fee)`}\\
         </Button>
       </div>
     );
@@ -490,7 +535,7 @@ const ReceiptView = () => {
             <CheckCircle className="w-5 h-5" /> Accept
           </Button>
           <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("reject")}>
-            <XCircle className="w-5 h-5" /> Reject (₦{getSpamFee().toLocaleString()} fee)
+            <XCircle className="w-5 h-5" /> Reject {receipt.spam_fee_paid && receipt.spam_fee_decision === "reject" ? "(fee paid)" : `(₦${getSpamFee().toLocaleString()} fee)`}\\
           </Button>
         </div>
       );
@@ -652,14 +697,21 @@ const ReceiptView = () => {
                      decisionType === "refund" ? "Request Refund" : "Reject Decision"}
                   </h3>
 
-                  {needsSpamFee(decisionType) && (
+                  {needsSpamFee(decisionType) && receipt.spam_fee_paid && receipt.spam_fee_decision === decisionType ? (
+                    <div className="bg-success/10 rounded-xl p-3 flex gap-2">
+                      <CheckCircle className="w-4 h-4 text-success shrink-0 mt-0.5" />
+                      <p className="text-xs text-success-foreground">
+                        Anti‑spam fee has already been paid for this decision.
+                      </p>
+                    </div>
+                  ) : needsSpamFee(decisionType) ? (
                     <div className="bg-warning/10 rounded-xl p-3 flex gap-2">
                       <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
                       <p className="text-xs text-muted-foreground">
                         A fee of <strong>₦{getSpamFee().toLocaleString()}</strong> will be charged via Paystack to prevent abuse.
                       </p>
                     </div>
-                  )}
+                  ) : null}
 
                   {decisionType === "release_specific" && (
                     <div className="space-y-2">

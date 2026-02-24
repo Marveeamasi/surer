@@ -34,11 +34,59 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { amount, callbackUrl, receiptId, decisionType } = await req.json();
+    const { callbackUrl, receiptId, decisionType } = await req.json();
 
     if (!receiptId || !decisionType) {
       return new Response(JSON.stringify({ error: "Missing receipt or decision info" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // compute fee server‑side based on receipt amount (do not trust client)
+    const { data: receiptData, error: rDataErr } = await supabaseAdmin
+      .from("receipts")
+      .select("amount")
+      .eq("id", receiptId)
+      .single();
+    if (rDataErr || !receiptData) {
+      return new Response(JSON.stringify({ error: "Receipt not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const amt = receiptData.amount;
+    const getSpamFee = (amount: number) => {
+      if (amount < 50000) return 100;
+      if (amount < 500000) return 200;
+      return 300;
+    };
+    const feeAmount = getSpamFee(amt);
+
+    // ensure the authenticated user is a participant on the receipt
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const { data: receipt, error: rErr } = await supabaseAdmin
+      .from("receipts")
+      .select("sender_id, receiver_id, receiver_email")
+      .eq("id", receiptId)
+      .single();
+    if (rErr || !receipt) {
+      return new Response(JSON.stringify({ error: "Receipt not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const isParticipant =
+      receipt.sender_id === user.id ||
+      receipt.receiver_id === user.id ||
+      receipt.receiver_email === user.email;
+    if (!isParticipant) {
+      return new Response(JSON.stringify({ error: "Unauthorized for this receipt" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -62,7 +110,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         email: user.email,
-        amount: amount * 100, // Paystack uses kobo
+        amount: feeAmount * 100, // Paystack uses kobo
         callback_url: callbackUrl,
         reference,
         metadata: {

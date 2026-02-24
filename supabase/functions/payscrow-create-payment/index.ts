@@ -28,7 +28,10 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -57,10 +60,13 @@ Deno.serve(async (req) => {
     }
 
     if (receipt.sender_id !== user.id) {
-      return new Response(JSON.stringify({ error: "Only the sender can pay" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Only the sender can pay" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const { data: senderProfile } = await supabaseAdmin
@@ -71,10 +77,13 @@ Deno.serve(async (req) => {
 
     const payscrowApiKey = Deno.env.get("PAYSCROW_BROKER_API_KEY");
     if (!payscrowApiKey) {
-      return new Response(JSON.stringify({ error: "Payscrow not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Payscrow not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const transactionRef = `SURER-${receipt.id.slice(0, 8)}-${Date.now()}`;
@@ -91,8 +100,8 @@ Deno.serve(async (req) => {
       merchantName: receipt.receiver_email.split("@")[0],
       customerEmailAddress: user.email,
       customerName: senderProfile?.display_name || user.email!.split("@")[0],
-      customerPhoneNo: "08000000000",
-      merchantPhoneNo: "08000000000",
+      customerPhoneNo: "08093760021",// leave this as the real number else payscrow will throw error
+      merchantPhoneNo: "08093760021",// leave this as the real number else payscrow will throw error
       currencyCode: "NGN",
       merchantChargePercentage: 0, // Customer (sender) pays all Payscrow charges
       returnUrl: `${origin}/receipt/${receipt.id}`,
@@ -108,7 +117,10 @@ Deno.serve(async (req) => {
       // NO settlementAccounts — money stays fluid in escrow until /broker/settle is called
     };
 
-    console.log("Creating Payscrow payment (no pre-settlement):", JSON.stringify(requestBody));
+    console.log(
+      "Creating Payscrow payment (no pre-settlement):",
+      JSON.stringify(requestBody),
+    );
 
     const payscrowResponse = await fetch(
       `${PAYSCROW_API_BASE}/transactions/start`,
@@ -129,7 +141,10 @@ Deno.serve(async (req) => {
       let errorMsg = "Payscrow error";
       if (Array.isArray(payscrowData?.errors)) {
         errorMsg = payscrowData.errors.join(", ");
-      } else if (typeof payscrowData?.errors === "object" && payscrowData.errors !== null) {
+      } else if (
+        typeof payscrowData?.errors === "object" &&
+        payscrowData.errors !== null
+      ) {
         errorMsg = Object.values(payscrowData.errors).flat().join(", ");
       } else if (typeof payscrowData?.errors === "string") {
         errorMsg = payscrowData.errors;

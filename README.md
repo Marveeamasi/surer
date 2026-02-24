@@ -82,8 +82,9 @@ All settlements happen at the **end** via Payscrow's `/broker/settle` API:
 | `payscrow-webhook` | Receives Payscrow payment confirmation, activates receipt |
 | `payscrow-release` | **Master Accountant** — builds settlement array, calls `/broker/settle` |
 | `dispute-form-handler` | Creates local dispute record (does NOT call Payscrow dispute API) |
-| `paystack-initialize-spam-fee` | Initializes Paystack payment for anti-spam fee |
+| `paystack-initialize-spam-fee` | Initializes Paystack payment for anti-spam fee (amount computed server‑side) |
 | `paystack-webhook` | Verifies Paystack signature, records spam fee payment |
+| `paystack-verify-spam-fee` | Optional helper called on redirect to double-check payment and update database |
 | `cron-dispute-check` | Daily: auto-executes 2-day decisions, escalates 4-day disputes |
 | `send-notification-email` | Sends styled HTML emails for all events via Resend |
 | `check-email` | Checks if email exists for auth flow |
@@ -93,8 +94,8 @@ All settlements happen at the **end** via Payscrow's `/broker/settle` API:
 
 | Table | Purpose |
 |---|---|
-| `profiles` | User bank details, display name, fingerprint setting |
-| `receipts` | Core transaction records with decisions and status |
+| `profiles` | User bank details, display name, fingerprint setting, optional WebAuthn credential |
+| `receipts` | Core transaction records with decisions, status and anti‑spam fee tracking |
 | `disputes` | Local dispute tracking with 4-day expiry |
 | `evidence` | Image evidence uploaded during disputes |
 | `admin_decisions` | Audit log of admin resolutions |
@@ -157,12 +158,14 @@ Configure these in your payment provider dashboards:
 ### 5. Production Checklist
 
 - [ ] Verify your domain on Resend (replace `onboarding@resend.dev`)
+- [ ] Encourage early testers to register fingerprint in settings (WebAuthn) and save before using biometric actions
 - [ ] Update `APP_URL` in `send-notification-email` to your production domain
 - [ ] Configure Payscrow webhook URL in their dashboard
 - [ ] Configure Paystack webhook URL in their dashboard
+- [ ] (Optional) configure Paystack webhook / verification on your callback URL to ensure spam‑fee payments are confirmed
 - [ ] Set up daily cron job
 - [ ] Set admin bank account in Admin panel
-- [ ] Test full flow: create receipt → pay → decide → settle
+- [ ] Test full flow: create receipt → pay → make decisions (including spam‑fee scenarios) → settle
 
 ---
 
