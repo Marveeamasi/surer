@@ -43,6 +43,12 @@ Deno.serve(async (req) => {
       });
     }
 
+        // ensure the authenticated user is a participant on the receipt
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
     // compute fee server‑side based on receipt amount (do not trust client)
     const { data: receiptData, error: rDataErr } = await supabaseAdmin
       .from("receipts")
@@ -63,11 +69,6 @@ Deno.serve(async (req) => {
     };
     const feeAmount = getSpamFee(amt);
 
-    // ensure the authenticated user is a participant on the receipt
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
     const { data: receipt, error: rErr } = await supabaseAdmin
       .from("receipts")
       .select("sender_id, receiver_id, receiver_email")

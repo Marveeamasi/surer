@@ -489,10 +489,10 @@ const ReceiptView = () => {
           <CheckCircle className="w-5 h-5" /> Release Full Payment
         </Button>
         <Button variant="outline" size="lg" className="w-full" onClick={() => startDecision("release_specific")}>
-          <Send className="w-5 h-5" /> Release Specific Amount {receipt.spam_fee_paid && receipt.spam_fee_decision === "release_specific" ? "(fee paid)" : `(₦${getSpamFee().toLocaleString()} fee)`}\\
+          <Send className="w-5 h-5" /> Release Specific Amount
         </Button>
-        <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("refund")}>\
-          <XCircle className="w-5 h-5" /> Request Full Refund {receipt.spam_fee_paid && receipt.spam_fee_decision === "refund" ? "(fee paid)" : `(₦${getSpamFee().toLocaleString()} fee)`}\\
+        <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("refund")}>
+          <XCircle className="w-5 h-5" /> Request Full Refund
         </Button>
       </div>
     );
@@ -643,7 +643,7 @@ const ReceiptView = () => {
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Description</p>
                   <p className="font-medium text-foreground">{receipt.description}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Receiver</p>
                     <p className="text-sm font-medium text-foreground">{receipt.receiver_email}</p>
