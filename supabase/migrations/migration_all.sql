@@ -1,3 +1,13 @@
+-- ============================================================
+-- MIGRATION: 20260212230549_657661dc-8c1f-4586-b7fc-e26e9306b155
+-- ============================================================
+
+-- Storage bucket for evidence (using extensions)
+CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA extensions;
+
+-- ============================================================
+-- MIGRATION: 20260213065549_727d4bfc-1e68-44b8-bcd9-59ba4e17d671
+-- ============================================================
 
 -- 1. User roles (no deps)
 CREATE TABLE public.user_roles (
@@ -8,7 +18,7 @@ CREATE TABLE public.user_roles (
   UNIQUE(user_id, role)
 );
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own roles" ON public.user_roles FOR SELECT USING (auth.uid() = user_id);
+-- Policies managed manually (all permissions allowed)
 
 -- 2. Profiles
 CREATE TABLE public.profiles (
@@ -23,9 +33,7 @@ CREATE TABLE public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "View own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+-- Policies managed manually (all permissions allowed)
 
 -- 3. Receipts
 CREATE TABLE public.receipts (
@@ -48,10 +56,7 @@ CREATE TABLE public.receipts (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 ALTER TABLE public.receipts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "View receipts as participant" ON public.receipts FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id OR auth.uid() = created_by);
-CREATE POLICY "Create receipts" ON public.receipts FOR INSERT WITH CHECK (auth.uid() = created_by);
-CREATE POLICY "Update receipts as participant" ON public.receipts FOR UPDATE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
-CREATE POLICY "Delete pending receipts" ON public.receipts FOR DELETE USING (auth.uid() = created_by AND status = 'pending');
+-- Policies managed manually (all permissions allowed)
 
 -- 4. Disputes
 CREATE TABLE public.disputes (
@@ -68,9 +73,7 @@ CREATE TABLE public.disputes (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 ALTER TABLE public.disputes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "View disputes as participant" ON public.disputes FOR SELECT USING (EXISTS (SELECT 1 FROM public.receipts r WHERE r.id = receipt_id AND (auth.uid() = r.sender_id OR auth.uid() = r.receiver_id)));
-CREATE POLICY "Create disputes" ON public.disputes FOR INSERT WITH CHECK (auth.uid() = initiated_by);
-CREATE POLICY "Update disputes as participant" ON public.disputes FOR UPDATE USING (EXISTS (SELECT 1 FROM public.receipts r WHERE r.id = receipt_id AND (auth.uid() = r.sender_id OR auth.uid() = r.receiver_id)));
+-- Policies managed manually (all permissions allowed)
 
 -- 5. Evidence
 CREATE TABLE public.evidence (
@@ -82,9 +85,7 @@ CREATE TABLE public.evidence (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 ALTER TABLE public.evidence ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "View evidence as participant" ON public.evidence FOR SELECT USING (EXISTS (SELECT 1 FROM public.disputes d JOIN public.receipts r ON r.id = d.receipt_id WHERE d.id = dispute_id AND (auth.uid() = r.sender_id OR auth.uid() = r.receiver_id)));
-CREATE POLICY "Upload evidence" ON public.evidence FOR INSERT WITH CHECK (auth.uid() = uploaded_by);
-CREATE POLICY "Delete own evidence" ON public.evidence FOR DELETE USING (auth.uid() = uploaded_by);
+-- Policies managed manually (all permissions allowed)
 
 -- 6. Admin decisions
 CREATE TABLE public.admin_decisions (
@@ -96,8 +97,7 @@ CREATE TABLE public.admin_decisions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 ALTER TABLE public.admin_decisions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins manage decisions" ON public.admin_decisions FOR ALL USING (EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Participants view decisions" ON public.admin_decisions FOR SELECT USING (EXISTS (SELECT 1 FROM public.disputes d JOIN public.receipts r ON r.id = d.receipt_id WHERE d.id = dispute_id AND (auth.uid() = r.sender_id OR auth.uid() = r.receiver_id)));
+-- Policies managed manually (all permissions allowed)
 
 -- 7. Withdrawals
 CREATE TABLE public.withdrawals (
@@ -112,8 +112,7 @@ CREATE TABLE public.withdrawals (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 ALTER TABLE public.withdrawals ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "View own withdrawals" ON public.withdrawals FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Create own withdrawals" ON public.withdrawals FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- Policies managed manually (all permissions allowed)
 
 -- Triggers
 CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS TRIGGER AS $$ BEGIN INSERT INTO public.profiles (id, email) VALUES (NEW.id, NEW.email) ON CONFLICT (id) DO NOTHING; RETURN NEW; END; $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
@@ -126,6 +125,40 @@ CREATE TRIGGER update_receipts_updated_at BEFORE UPDATE ON public.receipts FOR E
 
 -- Storage
 INSERT INTO storage.buckets (id, name, public) VALUES ('evidence', 'evidence', true) ON CONFLICT (id) DO NOTHING;
-CREATE POLICY "Upload evidence files" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'evidence' AND auth.uid() IS NOT NULL);
-CREATE POLICY "View evidence files" ON storage.objects FOR SELECT USING (bucket_id = 'evidence' AND auth.uid() IS NOT NULL);
-CREATE POLICY "Delete evidence files" ON storage.objects FOR DELETE USING (bucket_id = 'evidence' AND auth.uid() IS NOT NULL);
+-- Policies managed manually (all permissions allowed)
+
+-- ============================================================
+-- MIGRATION: 20260214052606_fe513013-d330-460f-ad36-834f8e240e78
+-- ============================================================
+
+-- Add decision tracking columns to receipts
+ALTER TABLE public.receipts
+ADD COLUMN IF NOT EXISTS sender_decision text,
+ADD COLUMN IF NOT EXISTS sender_decision_reason text,
+ADD COLUMN IF NOT EXISTS sender_decision_amount numeric,
+ADD COLUMN IF NOT EXISTS receiver_decision text,
+ADD COLUMN IF NOT EXISTS receiver_decision_reason text,
+ADD COLUMN IF NOT EXISTS decision_auto_execute_at timestamptz;
+
+
+-- ============================================================
+-- MIGRATION: 20260216131815_44096293-9882-48bb-9422-ff26db955536
+-- ============================================================
+
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bank_code text;
+
+
+-- ============================================================
+-- MIGRATION: 20260224120000_add_spam_webauthn_columns
+-- ============================================================
+
+-- Add spam fee tracking and WebAuthn credential storage
+
+ALTER TABLE public.receipts
+  ADD COLUMN IF NOT EXISTS spam_fee_paid boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS spam_fee_reference text,
+  ADD COLUMN IF NOT EXISTS spam_fee_decision text,
+  ADD COLUMN IF NOT EXISTS spam_fee_amount numeric;
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS webauthn_credential text;
