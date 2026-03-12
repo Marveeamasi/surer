@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Shield, CheckCircle, Copy, AlertTriangle, Trash2, CreditCard,
   Edit, X, Send, Loader2, Camera, Upload, XCircle
@@ -19,7 +19,6 @@ import { toast } from "sonner";
 
 const ReceiptView = () => {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [receipt, setReceipt] = useState<any>(null);
@@ -82,49 +81,6 @@ const ReceiptView = () => {
   useEffect(() => {
     fetchReceipt();
   }, [id]);
-
-  // Resume pending decision after Paystack spam fee callback
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const handleRedirect = async () => {
-      const ref = searchParams.get("reference") || searchParams.get("trxref");
-      if (ref && receipt) {
-        const pendingStr = sessionStorage.getItem("pending_decision");
-        if (pendingStr) {
-          const pending = JSON.parse(pendingStr);
-          if (pending.receiptId === receipt.id) {
-            // verify spam fee server‑side before finalizing the action
-            try {
-              const { data, error } = await supabase.functions.invoke("paystack-verify-spam-fee", {
-                body: { reference: ref, receiptId: receipt.id },
-              });
-
-              if (error || !data?.success) {
-                // If verification fails we'll still allow the user to retry
-                toast.error("Unable to verify fee payment. Please try again.");
-                return;
-              }
-
-              sessionStorage.removeItem("pending_decision");
-              toast.success("Fee paid! Submitting your decision...");
-              submitDecision(pending.type, pending.reason, pending.amount);
-              window.history.replaceState({}, "", `/receipt/${id}`);
-            } catch (e) {
-              console.error("Spam fee verify error", e);
-              toast.error("Error verifying fee payment");
-            }
-          }
-        } else {
-          // no pending decision but might have just paid the fee via redirect
-          // refresh receipt state in case webhook/verify updated it
-          await fetchReceipt();
-          window.history.replaceState({}, "", `/receipt/${id}`);
-        }
-      }
-    };
-
-    handleRedirect();
-  }, [searchParams, receipt]);
 
   const isSender = receipt?.sender_id === user?.id;
   const isReceiver = receipt?.receiver_id === user?.id || receipt?.receiver_email === user?.email;
@@ -204,14 +160,6 @@ const ReceiptView = () => {
     setDecisionPreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const getSpamFee = () => {
-    if (!receipt) return 100;
-    if (receipt.amount < 50000) return 100;
-    if (receipt.amount < 500000) return 200;
-    return 300;
-  };
-
-  const needsSpamFee = (type: string) => ["release_specific", "refund", "reject"].includes(type);
   const needsReason = (type: string) => ["release_specific", "refund", "reject"].includes(type);
 
   // Start decision flow
@@ -250,9 +198,8 @@ const ReceiptView = () => {
     }
   };
 
-  // Ensure a dispute record exists for the receipt
+  // Ensure a dispute record exists for the receipt (for evidence tracking)
   const ensureDispute = async (reason: string, type: string, amt: string): Promise<string | null> => {
-    // Check if dispute already exists
     if (dispute?.id) return dispute.id;
 
     const { data: newDispute } = await db.from("disputes").insert({
@@ -273,24 +220,10 @@ const ReceiptView = () => {
     return null;
   };
 
-  // Submit decision (after PIN + spam fee verified)
+  // Submit decision (after PIN verified)
   const submitDecision = async (type: string, reason: string, amount: string) => {
     setSubmittingDecision(true);
     const isSenderDecision = isSender;
-
-    // if this decision requires a spam fee ensure it has been paid
-    if (needsSpamFee(type)) {
-      const { data: rec, error: feeErr } = await db
-        .from("receipts")
-        .select("spam_fee_paid, spam_fee_decision")
-        .eq("id", receipt.id)
-        .maybeSingle();
-      if (feeErr || !rec?.spam_fee_paid || rec.spam_fee_decision !== type) {
-        toast.error("Anti‑spam fee not found or mismatched. Please complete payment first.");
-        setSubmittingDecision(false);
-        return;
-      }
-    }
 
     try {
       const updateData: any = {};
@@ -304,38 +237,46 @@ const ReceiptView = () => {
         updateData.receiver_decision_reason = reason || null;
       }
 
+      // ================================================================
+      // CRITICAL: During ACTIVE, if sender picks 2/3 and receiver had
+      // "delivered" (4), clear receiver_decision so they must pick 5/6
+      // ================================================================
+      if (receipt.status === "active" && isSenderDecision) {
+        if ((type === "release_specific" || type === "refund") && receipt.receiver_decision === "delivered") {
+          updateData.receiver_decision = null;
+          updateData.receiver_decision_reason = null;
+        }
+      }
+
       // Compute current state after this decision
       const currentSenderDec = isSenderDecision ? type : receipt.sender_decision;
-      const currentReceiverDec = isSenderDecision ? receipt.receiver_decision : type;
+      // If we just cleared receiver_decision, treat it as null
+      const currentReceiverDec = updateData.receiver_decision === null && isSenderDecision
+        ? null
+        : (isSenderDecision ? receipt.receiver_decision : type);
 
       let newStatus = receipt.status;
       let shouldRelease = false;
 
       // === ACTIVE STATUS LOGIC ===
       if (receipt.status === "active") {
-        // (1 and 4) or (4 and 1) => completed
+        // (1 and 4) or (4 and 1) → completed
         if (currentSenderDec === "release_all" && currentReceiverDec === "delivered") {
           shouldRelease = true;
           newStatus = "completed";
         }
-        // (1 alone) => release_all, no need for receiver response, but wait 2 days
-        // (4 alone) => delivered, wait 2 days for sender response
-        // (2 or 3 alone) => wait for receiver 5/6, set timer
-        // (2/3 and 5) or (5 and 2/3) => completed
+        // (2/3 and 5) → completed
         else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
           shouldRelease = true;
           newStatus = "completed";
         }
-        // (2/3 and 6) or (6 and 2/3) => dispute
+        // (2/3 and 6) → dispute
         else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "reject") {
           newStatus = "dispute";
           updateData.decision_auto_execute_at = null;
         }
-        // (1 alone without 4) => set 2-day timer if not already set
-        // (4 alone without 1) => set 2-day timer if not already set
-        // (2 or 3 alone without 5/6) => set 2-day timer
+        // Single-party decision with no counter → set 2-day auto-execute
         else if (!shouldRelease) {
-          // Set auto-execute timer (2 days) if a single-party decision was just made
           if ((currentSenderDec && !currentReceiverDec) || (!currentSenderDec && currentReceiverDec)) {
             updateData.decision_auto_execute_at = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
           }
@@ -343,22 +284,22 @@ const ReceiptView = () => {
       }
       // === DISPUTE STATUS LOGIC ===
       else if (receipt.status === "dispute") {
-        // During dispute, sender can choose 1 (release_all) to end it immediately
+        // Sender picks 1 → immediate release regardless of receiver decision
         if (currentSenderDec === "release_all") {
           shouldRelease = true;
           newStatus = "completed";
         }
-        // (2/3 and 5) => completed
+        // (2/3 and 5) → completed
         else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
           shouldRelease = true;
           newStatus = "completed";
         }
-        // (2/3 and 6) => stays dispute (both still disagree)
-        // No status change needed
+        // (2/3 and 6) or (6 and 2/3) → stays dispute, no change needed
+        // No auto-execute timer during dispute - only 4-day expiry to unresolved
       }
 
-      // Clear timer if both parties have decided
-      if (currentSenderDec && currentReceiverDec) {
+      // Clear auto-execute timer if both parties decided and we're resolving
+      if (shouldRelease) {
         updateData.decision_auto_execute_at = null;
       }
 
@@ -366,15 +307,23 @@ const ReceiptView = () => {
 
       await db.from("receipts").update(updateData).eq("id", receipt.id);
 
-      // Create dispute record if status changed to "dispute"
-      if (newStatus === "dispute" && receipt.status !== "dispute") {
-        const disputeId = await ensureDispute(reason, type, amount);
-        if (disputeId && decisionEvidence.length > 0) {
-          await uploadEvidence(disputeId);
+      // Upload evidence if provided (create dispute record if needed for tracking)
+      if (decisionEvidence.length > 0) {
+        if (newStatus === "dispute" && receipt.status !== "dispute") {
+          // Status just changed to dispute - create dispute record
+          const disputeId = await ensureDispute(reason, type, amount);
+          if (disputeId) await uploadEvidence(disputeId);
+        } else if (dispute?.id) {
+          // Dispute already exists - add evidence
+          await uploadEvidence(dispute.id);
+        } else {
+          // No dispute yet but evidence was submitted - create one for tracking
+          const disputeId = await ensureDispute(reason, type, amount);
+          if (disputeId) await uploadEvidence(disputeId);
         }
-      } else if (decisionEvidence.length > 0 && dispute?.id) {
-        // Upload evidence to existing dispute
-        await uploadEvidence(dispute.id);
+      } else if (newStatus === "dispute" && receipt.status !== "dispute") {
+        // Even without evidence, ensure dispute record exists for 4-day tracking
+        await ensureDispute(reason, type, amount);
       }
 
       // If release logic is true, call payscrow-release
@@ -383,7 +332,7 @@ const ReceiptView = () => {
           currentSenderDec === "release_specific" ? "release_specific" : "refund";
 
         try {
-          await supabase.functions.invoke("payscrow-release", {
+          const { data: releaseResult, error: releaseError } = await supabase.functions.invoke("payscrow-release", {
             body: {
               receiptId: receipt.id,
               decision: releaseDecision,
@@ -392,8 +341,23 @@ const ReceiptView = () => {
                 : null,
             },
           });
+
+          if (releaseError || (releaseResult && !releaseResult.success)) {
+            const errMsg = releaseResult?.error || "Settlement failed";
+            toast.error(errMsg);
+            // Revert status if settlement failed
+            await db.from("receipts").update({ status: receipt.status }).eq("id", receipt.id);
+            setSubmittingDecision(false);
+            await fetchReceipt();
+            return;
+          }
         } catch (e) {
           console.error("Release function error:", e);
+          toast.error("Settlement processing failed. Please try again.");
+          await db.from("receipts").update({ status: receipt.status }).eq("id", receipt.id);
+          setSubmittingDecision(false);
+          await fetchReceipt();
+          return;
         }
       }
 
@@ -412,7 +376,7 @@ const ReceiptView = () => {
         console.error("Notification error:", e);
       }
 
-      toast.success(shouldRelease ? "Decision made! Funds being processed via Payscrow." : "Decision recorded!");
+      toast.success(shouldRelease ? "Decision made! Settlement being processed via Payscrow." : "Decision recorded!");
       setShowDecisionForm(false);
       await fetchReceipt();
     } catch (err) {
@@ -422,53 +386,12 @@ const ReceiptView = () => {
     setSubmittingDecision(false);
   };
 
-  // Form submit for decisions requiring reason/evidence + spam fee
+  // Form submit for decisions requiring reason/evidence (no spam fee)
   const handleDecisionFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (needsSpamFee(decisionType)) {
-      // if fee already paid (and recorded) we can bypass Paystack
-      if (receipt.spam_fee_paid && receipt.spam_fee_decision === decisionType) {
-        requirePin("Confirm Decision", "Enter your PIN to submit this decision.", () => {
-          submitDecision(decisionType, decisionReason, decisionAmount);
-        });
-        return;
-      }
-
-      requirePin("Confirm Decision", "Enter your PIN to pay the anti-spam fee and submit your decision.", async () => {
-        try {
-          const { data, error } = await supabase.functions.invoke("paystack-initialize-spam-fee", {
-            body: {
-              callbackUrl: `${window.location.origin}/receipt/${receipt.id}`,
-              receiptId: receipt.id,
-              decisionType,
-            },
-          });
-
-          if (error || !data?.authorization_url) {
-            toast.error(data?.error || "Failed to initialize fee payment");
-            return;
-          }
-
-          // Store pending decision in sessionStorage so we can resume after Paystack redirect
-          sessionStorage.setItem("pending_decision", JSON.stringify({
-            receiptId: receipt.id,
-            type: decisionType,
-            reason: decisionReason,
-            amount: decisionAmount,
-            reference: data.reference,
-          }));
-
-          window.location.href = data.authorization_url;
-        } catch {
-          toast.error("Fee payment failed");
-        }
-      });
-    } else {
-      requirePin("Confirm Decision", "Enter your PIN to submit this decision.", () => {
-        submitDecision(decisionType, decisionReason, decisionAmount);
-      });
-    }
+    requirePin("Confirm Decision", "Enter your PIN to submit this decision.", () => {
+      submitDecision(decisionType, decisionReason, decisionAmount);
+    });
   };
 
   // Sender action buttons
@@ -477,7 +400,7 @@ const ReceiptView = () => {
     if (receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
 
     // During active: show if no decision yet
-    // During dispute: ALWAYS show (allow re-decision)
+    // During dispute: ALWAYS show (allow re-decision with 1, 2, 3)
     if (receipt.status === "active" && receipt.sender_decision) return null;
 
     return (
@@ -504,12 +427,12 @@ const ReceiptView = () => {
     if (receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
 
     // During active: show if no decision yet
-    // During dispute: ALWAYS show (allow re-decision - show 5/6)
+    // During dispute: ALWAYS show (allow re-decision with 5, 6)
     if (receipt.status === "active" && receipt.receiver_decision) return null;
 
     const senderChosePartialOrRefund = receipt.sender_decision === "release_specific" || receipt.sender_decision === "refund";
 
-    // If sender chose 2 or 3, OR we're in dispute status, show Accept/Reject
+    // If sender chose 2 or 3, OR we're in dispute status → show Accept/Reject (5/6)
     if (senderChosePartialOrRefund || receipt.status === "dispute") {
       return (
         <div className="space-y-3">
@@ -535,7 +458,7 @@ const ReceiptView = () => {
             <CheckCircle className="w-5 h-5" /> Accept
           </Button>
           <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("reject")}>
-            <XCircle className="w-5 h-5" /> Reject {receipt.spam_fee_paid && receipt.spam_fee_decision === "reject" ? "(fee paid)" : `(₦${getSpamFee().toLocaleString()} fee)`}\\
+            <XCircle className="w-5 h-5" /> Reject
           </Button>
         </div>
       );
@@ -696,22 +619,6 @@ const ReceiptView = () => {
                     {decisionType === "release_specific" ? "Release Specific Amount" :
                      decisionType === "refund" ? "Request Refund" : "Reject Decision"}
                   </h3>
-
-                  {needsSpamFee(decisionType) && receipt.spam_fee_paid && receipt.spam_fee_decision === decisionType ? (
-                    <div className="bg-success/10 rounded-xl p-3 flex gap-2">
-                      <CheckCircle className="w-4 h-4 text-success shrink-0 mt-0.5" />
-                      <p className="text-xs text-success-foreground">
-                        Anti‑spam fee has already been paid for this decision.
-                      </p>
-                    </div>
-                  ) : needsSpamFee(decisionType) ? (
-                    <div className="bg-warning/10 rounded-xl p-3 flex gap-2">
-                      <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground">
-                        A fee of <strong>₦{getSpamFee().toLocaleString()}</strong> will be charged via Paystack to prevent abuse.
-                      </p>
-                    </div>
-                  ) : null}
 
                   {decisionType === "release_specific" && (
                     <div className="space-y-2">
