@@ -9,9 +9,6 @@ verify_jwt = false
 [functions.payscrow-webhook]
 verify_jwt = false
 
-[functions.paystack-webhook]
-verify_jwt = false
-
 [functions.check-email]
 verify_jwt = false
 

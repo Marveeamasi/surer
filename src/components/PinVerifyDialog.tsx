@@ -7,13 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
-// helpers for base64 <-> Uint8Array conversions
-const bufToBase64 = (buffer: ArrayBuffer) => {
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  bytes.forEach((b) => (binary += String.fromCharCode(b)));
-  return btoa(binary);
-};
+const WEBAUTHN_CRED_KEY = "surer_webauthn_cred";
+
 const base64ToBuf = (b64: string): Uint8Array => {
   const binary = atob(b64);
   const len = binary.length;
@@ -42,7 +37,6 @@ const PinVerifyDialog = ({
   const [showPin, setShowPin] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [hasCredential, setHasCredential] = useState(false);
-  const [useBiometric, setUseBiometric] = useState(false);
 
   const handleVerifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,16 +73,9 @@ const PinVerifyDialog = ({
     try {
       setVerifying(true);
 
-      // fetch stored credential from profile
-      const { data } = await supabase
-        .from("profiles")
-        .select("webauthn_credential")
-        .eq("id", user?.id)
-        .single();
-
-      const raw = data?.webauthn_credential;
+      const raw = localStorage.getItem(WEBAUTHN_CRED_KEY);
       if (!raw) {
-        toast.error("No biometric credential registered");
+        toast.error("No biometric credential registered on this device");
         setVerifying(false);
         return;
       }
@@ -130,26 +117,28 @@ const PinVerifyDialog = ({
     onOpenChange(isOpen);
   };
 
-  // fetch profile to see if biometric credential exists
+  // Check if biometric credential exists (localStorage + DB flag)
   useEffect(() => {
     if (!user) return;
     (async () => {
       try {
         const { data } = await supabase
           .from("profiles")
-          .select("webauthn_credential")
+          .select("fingerprint_enabled")
           .eq("id", user.id)
           .single();
-        if (data?.webauthn_credential) setHasCredential(true);
+        const localCred = localStorage.getItem(WEBAUTHN_CRED_KEY);
+        if (data?.fingerprint_enabled && localCred) setHasCredential(true);
       } catch {}
     })();
   }, [user]);
 
-  // if dialog opens and we have a stored credential, prompt immediately
+  // If dialog opens and we have a stored credential, prompt immediately
   useEffect(() => {
     if (open && hasCredential) {
       handleBiometric();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, hasCredential]);
 
   return (
@@ -199,7 +188,6 @@ const PinVerifyDialog = ({
           </Button>
         </form>
 
-        {/* Biometric option (show only if credential exists) */}
         {hasCredential && (
           <button
             type="button"
