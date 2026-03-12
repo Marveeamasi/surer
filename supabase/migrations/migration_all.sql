@@ -99,21 +99,6 @@ CREATE TABLE public.admin_decisions (
 ALTER TABLE public.admin_decisions ENABLE ROW LEVEL SECURITY;
 -- Policies managed manually (all permissions allowed)
 
--- 7. Withdrawals
-CREATE TABLE public.withdrawals (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  receipt_id UUID REFERENCES public.receipts(id),
-  amount DECIMAL NOT NULL,
-  bank_name TEXT NOT NULL,
-  account_number TEXT NOT NULL,
-  account_name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-);
-ALTER TABLE public.withdrawals ENABLE ROW LEVEL SECURITY;
--- Policies managed manually (all permissions allowed)
-
 -- Triggers
 CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS TRIGGER AS $$ BEGIN INSERT INTO public.profiles (id, email) VALUES (NEW.id, NEW.email) ON CONFLICT (id) DO NOTHING; RETURN NEW; END; $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;

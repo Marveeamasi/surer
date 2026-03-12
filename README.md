@@ -31,14 +31,15 @@
 ### Decision Flow (Active → Completed)
 
 ```
-(1 + 4) or (4 + 1) → release_all → COMPLETED
-(2 or 3 first)     → receiver sees 5/6 instead of 4
-(2/3 + 5)          → release per sender's terms → COMPLETED
-(2/3 + 6)          → DISPUTE (4-day clock starts)
+firstly sender sees 1, 2, 3 and receiver sees just 4
+(1 then 4) or (4 then 1) → release_all → COMPLETED → settlement
+(2 first or 3 first)     → receiver sees 5 and 6 options to choose from immediatly at his end and 4 is off from ui 
+(2 or 3 then 5)          → release per sender's terms → COMPLETED → settlement
+(2 or 3 then 6)          → DISPUTE (4-day clock starts) and it continues again , but receiver only has 5 and 6, sender has 1, 2, and 3
 
-Any single decision with no response → auto-executes in 2 days
-During dispute: parties can re-decide (5 = agree, 6 = still disagree)
-After 4 days unresolved → UNRESOLVED → Admin decides immediately
+Any single decision with no response → auto-executes in 2 days wether 1, 2, 3, 4, 5 and 6 
+During dispute: parties can re-decide (1 = Release Full Payment to receiver, 2 = Release Specific Amount (partial release + refund), 3 = Full Refund to sender, 5 = agree, 6 = still disagree for receiver),
+After 4 days unresolved → UNRESOLVED → Admin sees in admin page (all eveidence for a receipt), and decides immediately (1, 2, or 3) and it is executed and settlement happens
 ```
 
 ### Fee Structure
@@ -47,7 +48,7 @@ After 4 days unresolved → UNRESOLVED → Admin decides immediately
 |---|---|---|
 | **Surer Protection Fee** | 1.5% (capped at ₦700) | Sender |
 | **Payscrow Processing Fee** | 2% + ₦100 (capped at ₦1,000) | Sender |
-| **Anti-Spam Fee** | ₦100–₦300 (tiered) | Party making decision 2, 3, or 6 |
+| **Anti-Spam Fee** removed totally
 
 ### Settlement (How Money Moves)
 
@@ -55,9 +56,9 @@ All settlements happen at the **end** via Payscrow's `/broker/settle` API:
 
 1. **No pre-settlement** at payment time — funds stay fluid in escrow
 2. When a final decision is reached, `payscrow-release` builds a **settlements array**:
-   - Admin gets 1.5% platform fee → admin's bank account
-   - Receiver gets payment (or partial) → receiver's bank account
-   - Sender gets refund (if any) → sender's bank account
+   - Admin gets 1.5% platform fee → admin's bank account if admin hasnt set bank account details? return null, send toast to ensure admin bank details is set bank, "can't process this now, please contact admin"
+   - Receiver gets payment (or partial) → receiver's bank account, if receiver hasnt set bank details? return null , send toast to ensure reciever sets bank details "please receiver must add their bank details
+   - Sender gets refund (if any) → sender's bank account, if they havent added bank details yet,return null and send toast to to ensure they set , "please sender must add their bank details"
 3. One API call settles everyone simultaneously
 
 ---
@@ -82,9 +83,9 @@ All settlements happen at the **end** via Payscrow's `/broker/settle` API:
 | `payscrow-webhook` | Receives Payscrow payment confirmation, activates receipt |
 | `payscrow-release` | **Master Accountant** — builds settlement array, calls `/broker/settle` |
 | `dispute-form-handler` | Creates local dispute record (does NOT call Payscrow dispute API) |
-| `paystack-initialize-spam-fee` | Initializes Paystack payment for anti-spam fee (amount computed server‑side) |
-| `paystack-webhook` | Verifies Paystack signature, records spam fee payment |
-| `paystack-verify-spam-fee` | Optional helper called on redirect to double-check payment and update database |
+| `paystack-initialize-spam-fee` remove
+| `paystack-webhook` remove
+| `paystack-verify-spam-fee` remove
 | `cron-dispute-check` | Daily: auto-executes 2-day decisions, escalates 4-day disputes |
 | `send-notification-email` | Sends styled HTML emails for all events via Resend |
 | `check-email` | Checks if email exists for auth flow |
@@ -100,12 +101,11 @@ All settlements happen at the **end** via Payscrow's `/broker/settle` API:
 | `evidence` | Image evidence uploaded during disputes |
 | `admin_decisions` | Audit log of admin resolutions |
 | `user_roles` | Role-based access (admin/user) |
-| `withdrawals` | *(Legacy — not used. Settlement is automatic via Payscrow)* |
 
 ### Security
 
 - **PIN verification** required for ALL critical actions (pay, decide, update, delete)
-- **RLS policies** on every table — users only see their own data
+- **RLS policies** on every table — but allows all access for now
 - **Admin role** stored in separate `user_roles` table (not on profile)
 - **Paystack webhook** verifies HMAC-SHA512 signature
 - **Edge functions** use `SUPABASE_SERVICE_ROLE_KEY` server-side only
@@ -119,7 +119,7 @@ All settlements happen at the **end** via Payscrow's `/broker/settle` API:
 | Secret | Source |
 |---|---|
 | `PAYSCROW_BROKER_API_KEY` | [Payscrow Marketplace Dashboard](https://payscrow.net) |
-| `PAYSTACK_SECRET_KEY` | [Paystack Dashboard](https://dashboard.paystack.com) |
+| `PAYSTACK_SECRET_KEY` not needed
 | `RESEND_API_KEY` | [Resend Dashboard](https://resend.com) |
 
 ### 2. Cron Setup
@@ -144,7 +144,7 @@ Configure these in your payment provider dashboards:
 | Provider | Webhook URL |
 |---|---|
 | **Payscrow** | `https://qnuyiztwqbzcbuheznnv.supabase.co/functions/v1/payscrow-webhook` |
-| **Paystack** | `https://qnuyiztwqbzcbuheznnv.supabase.co/functions/v1/paystack-webhook` |
+| **Paystack** | `https://qnuyiztwqbzcbuheznnv.supabase.co/functions/v1/paystack-webhook` not needed
 
 ### 4. Admin Setup
 
