@@ -144,8 +144,6 @@ export type Database = {
           display_name: string | null
           email: string | null
           fingerprint_enabled: boolean | null
-          // WebAuthn credential stored as JSON string (base64 rawId + type)
-          webauthn_credential: string | null
           id: string
           updated_at: string | null
         }
@@ -189,11 +187,6 @@ export type Database = {
           payscrow_fee: number | null
           payscrow_transaction_number: string | null
           payscrow_transaction_ref: string | null
-          // spam fee tracking
-          spam_fee_paid: boolean | null
-          spam_fee_reference: string | null
-          spam_fee_decision: string | null
-          spam_fee_amount: number | null
           receiver_decision: string | null
           receiver_decision_reason: string | null
           receiver_email: string
