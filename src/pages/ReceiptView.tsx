@@ -4,12 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Shield, CheckCircle, Copy, AlertTriangle, Trash2, CreditCard,
-  Edit, X, Send, Loader2, Camera, Upload, XCircle
+  ArrowLeft, Shield, CheckCircle, Copy, AlertTriangle,
+  Trash2, CreditCard, Edit, X, Send, Loader2, Camera,
+  Upload, XCircle, Clock, Lock, Info, RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
-import { FeeCalculator, formatNaira } from "@/components/FeeCalculator";
+import { formatNaira } from "@/components/FeeCalculator";
 import DisputeTimer from "@/components/DisputeTimer";
 import PinVerifyDialog from "@/components/PinVerifyDialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,343 +18,312 @@ import { db } from "@/lib/supabase";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Status config — includes settling + pending_bank_details
+// ─────────────────────────────────────────────────────────────────────────────
+const STATUS_CONFIG: Record<string, { label: string; bgClass: string; icon: any }> = {
+  pending:              { label: "Pending Payment",          bgClass: "bg-warning/20 text-warning",         icon: Clock         },
+  active:               { label: "Active — In Escrow",       bgClass: "bg-white/20",                        icon: Shield        },
+  settling:             { label: "Processing Settlement",    bgClass: "bg-blue-400/20 text-blue-300",       icon: Loader2       },
+  pending_bank_details: { label: "Action Required",          bgClass: "bg-orange-400/20 text-orange-300",   icon: AlertTriangle },
+  dispute:              { label: "In Dispute",               bgClass: "bg-orange-400/20 text-orange-300",   icon: AlertTriangle },
+  unresolved:           { label: "Unresolved — Admin Review",bgClass: "bg-destructive/20 text-destructive", icon: AlertTriangle },
+  completed:            { label: "Completed",                bgClass: "bg-accent/20 text-accent",           icon: CheckCircle   },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
 const ReceiptView = () => {
-  const { id } = useParams();
+  const { id }   = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [receipt, setReceipt] = useState<any>(null);
-  const [dispute, setDispute] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [paying, setPaying] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editAmount, setEditAmount] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [saving, setSaving] = useState(false);
 
-  // Decision form state
-  const [showDecisionForm, setShowDecisionForm] = useState(false);
-  const [decisionType, setDecisionType] = useState<string>("");
-  const [decisionReason, setDecisionReason] = useState("");
-  const [decisionAmount, setDecisionAmount] = useState("");
-  const [decisionEvidence, setDecisionEvidence] = useState<File[]>([]);
-  const [decisionPreviews, setDecisionPreviews] = useState<string[]>([]);
+  const [receipt,  setReceipt]  = useState<any>(null);
+  const [dispute,  setDispute]  = useState<any>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [paying,   setPaying]   = useState(false);
+  const [editing,  setEditing]  = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [editAmount,      setEditAmount]      = useState("");
+  const [editDescription, setEditDescription] = useState("");
+
+  // Decision form
+  const [showDecisionForm,   setShowDecisionForm]   = useState(false);
+  const [decisionType,       setDecisionType]       = useState("");
+  const [decisionReason,     setDecisionReason]     = useState("");
+  const [decisionAmount,     setDecisionAmount]     = useState("");
+  const [decisionEvidence,   setDecisionEvidence]   = useState<File[]>([]);
+  const [decisionPreviews,   setDecisionPreviews]   = useState<string[]>([]);
   const [submittingDecision, setSubmittingDecision] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fileInputRef   = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // PIN verification
-  const [pinOpen, setPinOpen] = useState(false);
+  // PIN dialog
+  const [pinOpen,       setPinOpen]       = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
-  const [pinTitle, setPinTitle] = useState("");
-  const [pinDesc, setPinDesc] = useState("");
+  const [pinTitle,      setPinTitle]      = useState("");
+  const [pinDesc,       setPinDesc]       = useState("");
 
   const requirePin = (title: string, desc: string, action: () => void) => {
-    setPinTitle(title);
-    setPinDesc(desc);
-    setPendingAction(() => action);
-    setPinOpen(true);
+    setPinTitle(title); setPinDesc(desc);
+    setPendingAction(() => action); setPinOpen(true);
   };
 
+  // ── Data fetching ──────────────────────────────────────────────────────────
   const fetchReceipt = async () => {
-    const { data, error } = await db
-      .from("receipts")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error || !data) {
-      toast.error("Receipt not found");
-    } else {
-      setReceipt(data);
-      const { data: disputeData } = await db
-        .from("disputes")
-        .select("*")
-        .eq("receipt_id", data.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setDispute(disputeData);
-    }
+    const { data, error } = await db.from("receipts").select("*").eq("id", id).maybeSingle();
+    if (error || !data) { toast.error("Receipt not found"); setLoading(false); return; }
+    setReceipt(data);
+    const { data: disputeData } = await db
+      .from("disputes").select("*").eq("receipt_id", data.id)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    setDispute(disputeData);
     setLoading(false);
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchReceipt(); }, [id]); // eslint-disable-line
+
+  // Poll while settling (check every 5s until status changes)
   useEffect(() => {
-    fetchReceipt();
-  }, [id]);
+    if (receipt?.status !== "settling") return;
+    const timer = setInterval(fetchReceipt, 5000);
+    return () => clearInterval(timer);
+  }, [receipt?.status]); // eslint-disable-line
 
-  const isSender = receipt?.sender_id === user?.id;
+  // ── Role detection ─────────────────────────────────────────────────────────
+  const isSender   = receipt?.sender_id === user?.id;
   const isReceiver = receipt?.receiver_id === user?.id || receipt?.receiver_email === user?.email;
-  const isCreator = receipt?.created_by === user?.id;
+  const isCreator  = receipt?.created_by === user?.id;
 
-  // Pay Now
+  // ── Actions ────────────────────────────────────────────────────────────────
   const executePayNow = async () => {
     setPaying(true);
     try {
       const { data, error } = await supabase.functions.invoke("payscrow-create-payment", {
         body: { receiptId: receipt.id },
       });
-      if (error || !data?.paymentLink) {
-        toast.error(data?.error || "Failed to initialize payment");
-      } else {
-        window.location.href = data.paymentLink;
-      }
-    } catch {
-      toast.error("Payment initialization failed");
-    }
+      if (error || !data?.paymentLink) toast.error(data?.error || "Failed to initialize payment");
+      else window.location.href = data.paymentLink;
+    } catch { toast.error("Payment initialization failed — please try again"); }
     setPaying(false);
   };
-
-  const handlePayNow = () => {
+  const handlePayNow = () =>
     requirePin("Confirm Payment", "Enter your PIN to proceed with payment.", executePayNow);
-  };
 
-  // Update receipt
   const executeUpdate = async () => {
     setSaving(true);
-    const { error } = await db
-      .from("receipts")
+    const { error } = await db.from("receipts")
       .update({ amount: parseFloat(editAmount), description: editDescription })
       .eq("id", receipt.id);
     setSaving(false);
-    if (error) toast.error("Failed to update");
-    else {
-      toast.success("Receipt updated!");
-      setEditing(false);
-      setReceipt({ ...receipt, amount: parseFloat(editAmount), description: editDescription });
-    }
+    if (error) { toast.error("Failed to update"); return; }
+    toast.success("Receipt updated!");
+    setEditing(false);
+    setReceipt({ ...receipt, amount: parseFloat(editAmount), description: editDescription });
   };
+  const handleUpdate = () =>
+    requirePin("Confirm Update", "Enter your PIN to save changes.", executeUpdate);
 
-  const handleUpdate = () => {
-    requirePin("Confirm Update", "Enter your PIN to update this receipt.", executeUpdate);
-  };
-
-  // Delete receipt
   const executeDelete = async () => {
     const { error } = await db.from("receipts").delete().eq("id", receipt.id);
-    if (error) toast.error("Cannot delete");
-    else { toast.success("Receipt deleted"); navigate("/dashboard"); }
+    if (error) { toast.error("Cannot delete this receipt"); return; }
+    toast.success("Receipt deleted"); navigate("/dashboard");
   };
-
-  const handleDelete = () => {
+  const handleDelete = () =>
     requirePin("Confirm Deletion", "Enter your PIN to permanently delete this receipt.", executeDelete);
-  };
 
-  // Copy link
   const handleCopyLink = () => {
-    const cleanUrl = `${window.location.origin}/receipt/${receipt.id}`;
-    navigator.clipboard.writeText(cleanUrl);
+    navigator.clipboard.writeText(`${window.location.origin}/receipt/${receipt.id}`);
     toast.success("Link copied!");
   };
 
-  // File handling
+  // ── Retry settlement (for pending_bank_details) ───────────────────────────
+  const executeRetrySett = async () => {
+    setRetrying(true);
+    const decision = receipt.settlement_decision;
+    const amount   = receipt.settlement_decision_amount;
+
+    if (!decision) {
+      toast.error("No pending decision found. Please contact support.");
+      setRetrying(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("payscrow-release", {
+        body: { receiptId: receipt.id, decision, amount },
+      });
+
+      if (error || !data?.success) {
+        const msg = data?.error || "Settlement failed. Please try again.";
+        if (data?.requiresBankDetails) {
+          toast.error(msg);
+        } else {
+          toast.error(msg);
+        }
+      } else {
+        toast.success("✅ Settlement sent! Funds are being processed.");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    }
+
+    await fetchReceipt();
+    setRetrying(false);
+  };
+  const handleRetrySett = () =>
+    requirePin("Retry Settlement", "Enter your PIN to retry settlement.", executeRetrySett);
+
+  // ── Evidence helpers ───────────────────────────────────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    setDecisionEvidence((prev) => [...prev, ...files]);
-    const newPreviews = files.map((f) => URL.createObjectURL(f));
-    setDecisionPreviews((prev) => [...prev, ...newPreviews]);
+    setDecisionEvidence(prev => [...prev, ...files]);
+    setDecisionPreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
   };
-
-  const removeFile = (index: number) => {
-    setDecisionEvidence((prev) => prev.filter((_, i) => i !== index));
-    URL.revokeObjectURL(decisionPreviews[index]);
-    setDecisionPreviews((prev) => prev.filter((_, i) => i !== index));
+  const removeFile = (i: number) => {
+    URL.revokeObjectURL(decisionPreviews[i]);
+    setDecisionEvidence(prev => prev.filter((_, j) => j !== i));
+    setDecisionPreviews(prev => prev.filter((_, j) => j !== i));
   };
+  const needsForm = (type: string) => ["release_specific", "refund", "reject"].includes(type);
 
-  const needsReason = (type: string) => ["release_specific", "refund", "reject"].includes(type);
-
-  // Start decision flow
+  // ── Start a decision ───────────────────────────────────────────────────────
   const startDecision = (type: string) => {
-    setDecisionType(type);
-    setDecisionReason("");
-    setDecisionAmount("");
-    setDecisionEvidence([]);
-    setDecisionPreviews([]);
-
-    if (needsReason(type)) {
-      setShowDecisionForm(true);
-    } else {
-      // Direct decisions (release_all, delivered, accept) - require PIN first
-      requirePin("Confirm Decision", "Enter your PIN to confirm this decision.", () => {
-        submitDecision(type, "", "");
-      });
-    }
+    setDecisionType(type); setDecisionReason(""); setDecisionAmount("");
+    setDecisionEvidence([]); setDecisionPreviews([]);
+    if (needsForm(type)) setShowDecisionForm(true);
+    else requirePin("Confirm Decision", "Enter your PIN to confirm.", () => submitDecision(type, "", ""));
   };
 
-  // Upload evidence
+  // ── Upload evidence ────────────────────────────────────────────────────────
   const uploadEvidence = async (disputeId: string) => {
     for (const file of decisionEvidence) {
       const path = `${disputeId}/${Date.now()}-${file.name}`;
-      const { error } = await db.storage.from("evidence").upload(path, file, {
-        contentType: "image/webp",
-      });
-      if (!error) {
-        await db.from("evidence").insert({
-          dispute_id: disputeId,
-          file_path: path,
-          uploaded_by: user!.id,
-          type: "image",
-        });
-      }
+      const { error } = await db.storage.from("evidence").upload(path, file, { contentType: file.type || "image/webp" });
+      if (!error) await db.from("evidence").insert({ dispute_id: disputeId, file_path: path, uploaded_by: user!.id, type: "image" });
     }
   };
 
-  // Ensure a dispute record exists for the receipt (for evidence tracking)
   const ensureDispute = async (reason: string, type: string, amt: string): Promise<string | null> => {
     if (dispute?.id) return dispute.id;
-
-    const { data: newDispute } = await db.from("disputes").insert({
-      receipt_id: receipt.id,
-      initiated_by: user!.id,
-      reason: reason || type,
-      proposed_action: type,
+    const { data: nd } = await db.from("disputes").insert({
+      receipt_id: receipt.id, initiated_by: user!.id,
+      reason: reason || type, proposed_action: type,
       proposed_amount: type === "release_specific" ? parseFloat(amt) : null,
       status: "open",
-      expires_at: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+      expires_at:      new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
       auto_execute_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
     }).select().single();
-
-    if (newDispute) {
-      setDispute(newDispute);
-      return newDispute.id;
-    }
+    if (nd) { setDispute(nd); return nd.id; }
     return null;
   };
 
-  // Submit decision (after PIN verified)
+  // ── Core: submit decision (README state machine) ───────────────────────────
   const submitDecision = async (type: string, reason: string, amount: string) => {
     setSubmittingDecision(true);
-    const isSenderDecision = isSender;
-
     try {
       const updateData: any = {};
 
-      if (isSenderDecision) {
-        updateData.sender_decision = type;
+      if (isSender) {
+        updateData.sender_decision        = type;
         updateData.sender_decision_reason = reason || null;
         updateData.sender_decision_amount = type === "release_specific" ? parseFloat(amount) : null;
       } else {
-        updateData.receiver_decision = type;
+        updateData.receiver_decision        = type;
         updateData.receiver_decision_reason = reason || null;
       }
 
-      // ================================================================
-      // CRITICAL: During ACTIVE, if sender picks 2/3 and receiver had
-      // "delivered" (4), clear receiver_decision so they must pick 5/6
-      // ================================================================
-      if (receipt.status === "active" && isSenderDecision) {
-        if ((type === "release_specific" || type === "refund") && receipt.receiver_decision === "delivered") {
-          updateData.receiver_decision = null;
-          updateData.receiver_decision_reason = null;
-        }
+      // Clear receiver "delivered" if sender now proposes refund/partial
+      if (receipt.status === "active" && isSender &&
+          (type === "release_specific" || type === "refund") &&
+          receipt.receiver_decision === "delivered") {
+        updateData.receiver_decision        = null;
+        updateData.receiver_decision_reason = null;
       }
 
-      // Compute current state after this decision
-      const currentSenderDec = isSenderDecision ? type : receipt.sender_decision;
-      // If we just cleared receiver_decision, treat it as null
-      const currentReceiverDec = updateData.receiver_decision === null && isSenderDecision
-        ? null
-        : (isSenderDecision ? receipt.receiver_decision : type);
+      const newSenderDec   = isSender ? type : receipt.sender_decision;
+      const newReceiverDec = (updateData.receiver_decision === null && isSender)
+        ? null : isSender ? receipt.receiver_decision : type;
 
-      let newStatus = receipt.status;
+      let newStatus     = receipt.status;
       let shouldRelease = false;
 
-      // === ACTIVE STATUS LOGIC ===
+      // ── ACTIVE transitions ───────────────────────────────────────────────
       if (receipt.status === "active") {
-        // (1 and 4) or (4 and 1) → completed
-        if (currentSenderDec === "release_all" && currentReceiverDec === "delivered") {
-          shouldRelease = true;
-          newStatus = "completed";
-        }
-        // (2/3 and 5) → completed
-        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
-          shouldRelease = true;
-          newStatus = "completed";
-        }
-        // (2/3 and 6) → dispute
-        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "reject") {
+        if (newSenderDec === "release_all" && newReceiverDec === "delivered") {
+          shouldRelease = true; newStatus = "completed";
+          updateData.decision_auto_execute_at = null;
+        } else if ((newSenderDec === "release_specific" || newSenderDec === "refund") && newReceiverDec === "accept") {
+          shouldRelease = true; newStatus = "completed";
+          updateData.decision_auto_execute_at = null;
+        } else if ((newSenderDec === "release_specific" || newSenderDec === "refund") && newReceiverDec === "reject") {
           newStatus = "dispute";
           updateData.decision_auto_execute_at = null;
-        }
-        // Single-party decision with no counter → set 2-day auto-execute
-        else if (!shouldRelease) {
-          if ((currentSenderDec && !currentReceiverDec) || (!currentSenderDec && currentReceiverDec)) {
-            updateData.decision_auto_execute_at = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
-          }
+        } else if (!shouldRelease) {
+          const onlyOneSide = (newSenderDec && !newReceiverDec) || (!newSenderDec && newReceiverDec);
+          if (onlyOneSide) updateData.decision_auto_execute_at = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
         }
       }
-      // === DISPUTE STATUS LOGIC ===
+      // ── DISPUTE transitions ──────────────────────────────────────────────
       else if (receipt.status === "dispute") {
-        // Sender picks 1 → immediate release regardless of receiver decision
-        if (currentSenderDec === "release_all") {
-          shouldRelease = true;
-          newStatus = "completed";
+        if (newSenderDec === "release_all") {
+          shouldRelease = true; newStatus = "completed";
+          updateData.decision_auto_execute_at = null;
+        } else if ((newSenderDec === "release_specific" || newSenderDec === "refund") && newReceiverDec === "accept") {
+          shouldRelease = true; newStatus = "completed";
+          updateData.decision_auto_execute_at = null;
         }
-        // (2/3 and 5) → completed
-        else if ((currentSenderDec === "release_specific" || currentSenderDec === "refund") && currentReceiverDec === "accept") {
-          shouldRelease = true;
-          newStatus = "completed";
-        }
-        // (2/3 and 6) or (6 and 2/3) → stays dispute, no change needed
-        // No auto-execute timer during dispute - only 4-day expiry to unresolved
-      }
-
-      // Clear auto-execute timer if both parties decided and we're resolving
-      if (shouldRelease) {
-        updateData.decision_auto_execute_at = null;
+        // (2/3 + 6): stays dispute — no status change
       }
 
       updateData.status = newStatus;
-
       await db.from("receipts").update(updateData).eq("id", receipt.id);
 
-      // Upload evidence if provided (create dispute record if needed for tracking)
+      // Evidence + dispute record
       if (decisionEvidence.length > 0) {
-        if (newStatus === "dispute" && receipt.status !== "dispute") {
-          // Status just changed to dispute - create dispute record
-          const disputeId = await ensureDispute(reason, type, amount);
-          if (disputeId) await uploadEvidence(disputeId);
-        } else if (dispute?.id) {
-          // Dispute already exists - add evidence
-          await uploadEvidence(dispute.id);
-        } else {
-          // No dispute yet but evidence was submitted - create one for tracking
-          const disputeId = await ensureDispute(reason, type, amount);
-          if (disputeId) await uploadEvidence(disputeId);
-        }
+        const disputeId = await ensureDispute(reason, type, amount);
+        if (disputeId) await uploadEvidence(disputeId);
       } else if (newStatus === "dispute" && receipt.status !== "dispute") {
-        // Even without evidence, ensure dispute record exists for 4-day tracking
         await ensureDispute(reason, type, amount);
       }
 
-      // If release logic is true, call payscrow-release
+      // Settlement
       if (shouldRelease) {
-        const releaseDecision = currentSenderDec === "release_all" ? "release_all" :
-          currentSenderDec === "release_specific" ? "release_specific" : "refund";
+        const releaseDecision =
+          newSenderDec === "release_all" ? "release_all" :
+          newSenderDec === "release_specific" ? "release_specific" : "refund";
+        const releaseAmount =
+          releaseDecision === "release_specific"
+            ? (isSender ? parseFloat(amount) : receipt.sender_decision_amount)
+            : null;
 
         try {
-          const { data: releaseResult, error: releaseError } = await supabase.functions.invoke("payscrow-release", {
-            body: {
-              receiptId: receipt.id,
-              decision: releaseDecision,
-              amount: releaseDecision === "release_specific"
-                ? (isSenderDecision ? parseFloat(amount) : receipt.sender_decision_amount)
-                : null,
-            },
-          });
+          const { data: releaseResult, error: releaseError } = await supabase.functions.invoke(
+            "payscrow-release",
+            { body: { receiptId: receipt.id, decision: releaseDecision, amount: releaseAmount } }
+          );
 
-          if (releaseError || (releaseResult && !releaseResult.success)) {
-            const errMsg = releaseResult?.error || "Settlement failed";
-            toast.error(errMsg);
-            // Revert status if settlement failed
-            await db.from("receipts").update({ status: receipt.status }).eq("id", receipt.id);
+          if (releaseError || !releaseResult?.success) {
+            const errMsg = releaseResult?.error || "Settlement failed.";
+
+            if (releaseResult?.requiresBankDetails) {
+              // Receipt is now "pending_bank_details" — tell user what to do
+              toast.error(`${errMsg} Go to Settings → Bank Details to fix this, then come back and tap Retry Settlement.`, { duration: 8000 });
+            } else {
+              toast.error(errMsg);
+              // Revert status to pre-release state
+              await db.from("receipts").update({ status: receipt.status }).eq("id", receipt.id);
+            }
             setSubmittingDecision(false);
             await fetchReceipt();
             return;
           }
         } catch (e) {
-          console.error("Release function error:", e);
-          toast.error("Settlement processing failed. Please try again.");
+          console.error("Release error:", e);
+          toast.error("Network error during settlement. Please try again.");
           await db.from("receipts").update({ status: receipt.status }).eq("id", receipt.id);
           setSubmittingDecision(false);
           await fetchReceipt();
@@ -361,163 +331,187 @@ const ReceiptView = () => {
         }
       }
 
-      // Send notification email
-      try {
-        await supabase.functions.invoke("send-notification-email", {
-          body: {
-            type: newStatus === "dispute" ? "dispute_started" : shouldRelease ? "dispute_resolved" : "decision_made",
-            receiptId: receipt.id,
-            decision: type,
-            reason: reason || undefined,
-            decidedBy: isSenderDecision ? "sender" : "receiver",
-          },
-        });
-      } catch (e) {
-        console.error("Notification error:", e);
-      }
+      // Email — fire-and-forget, never awaited, never breaks the flow
+      supabase.functions.invoke("send-notification-email", {
+        body: {
+          type:      newStatus === "dispute" ? "dispute_started" : shouldRelease ? "dispute_resolved" : "decision_made",
+          receiptId: receipt.id, decision: type,
+          reason:    reason || undefined,
+          decidedBy: isSender ? "sender" : "receiver",
+        },
+      }).catch(() => {/* email failure is silent */});
 
-      toast.success(shouldRelease ? "Decision made! Settlement being processed via Payscrow." : "Decision recorded!");
+      toast.success(
+        shouldRelease           ? "✅ Settlement sent. Funds will arrive in bank accounts shortly." :
+        newStatus === "dispute" ? "⚠️ Dispute started. You have 4 days to reach agreement." :
+                                  "Decision recorded."
+      );
       setShowDecisionForm(false);
       await fetchReceipt();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to submit decision");
+      toast.error("Failed to submit decision. Please try again.");
     }
     setSubmittingDecision(false);
   };
 
-  // Form submit for decisions requiring reason/evidence (no spam fee)
-  const handleDecisionFormSubmit = async (e: React.FormEvent) => {
+  const handleDecisionFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    requirePin("Confirm Decision", "Enter your PIN to submit this decision.", () => {
-      submitDecision(decisionType, decisionReason, decisionAmount);
-    });
+    requirePin("Confirm Decision", "Enter your PIN to submit.", () =>
+      submitDecision(decisionType, decisionReason, decisionAmount)
+    );
   };
 
-  // Sender action buttons
+  // ── getSenderActions ───────────────────────────────────────────────────────
   const getSenderActions = () => {
     if (!isSender) return null;
-    if (receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
-
-    // During active: show if no decision yet
-    // During dispute: ALWAYS show (allow re-decision with 1, 2, 3)
+    if (["unresolved", "completed", "pending", "settling", "pending_bank_details"].includes(receipt.status)) return null;
     if (receipt.status === "active" && receipt.sender_decision) return null;
 
     return (
       <div className="space-y-3">
-        <p className="text-sm font-medium text-foreground">
-          {receipt.status === "dispute" ? "Change your decision:" : "Your decision:"}
+        <p className="text-sm font-semibold text-foreground">
+          {receipt.status === "dispute" ? "Update your decision:" : "What would you like to do?"}
         </p>
         <Button variant="hero" size="lg" className="w-full" onClick={() => startDecision("release_all")}>
-          <CheckCircle className="w-5 h-5" /> Release Full Payment
+          <CheckCircle className="w-5 h-5" /> Release Full Payment to Receiver
         </Button>
         <Button variant="outline" size="lg" className="w-full" onClick={() => startDecision("release_specific")}>
-          <Send className="w-5 h-5" /> Release Specific Amount
+          <Send className="w-5 h-5" /> Release a Specific Amount
         </Button>
         <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("refund")}>
           <XCircle className="w-5 h-5" /> Request Full Refund
         </Button>
+        <p className="text-xs text-center text-muted-foreground">
+          No response from the receiver in 2 days = your decision executes automatically.
+        </p>
       </div>
     );
   };
 
-  // Receiver action buttons
+  // ── getReceiverActions ─────────────────────────────────────────────────────
   const getReceiverActions = () => {
     if (!isReceiver) return null;
-    if (receipt.status === "unresolved" || receipt.status === "completed" || receipt.status === "pending") return null;
+    if (["unresolved", "completed", "pending", "settling", "pending_bank_details"].includes(receipt.status)) return null;
 
-    // During active: show if no decision yet
-    // During dispute: ALWAYS show (allow re-decision with 5, 6)
-    if (receipt.status === "active" && receipt.receiver_decision) return null;
+    const senderProposed = receipt.sender_decision === "release_specific" || receipt.sender_decision === "refund";
 
-    const senderChosePartialOrRefund = receipt.sender_decision === "release_specific" || receipt.sender_decision === "refund";
-
-    // If sender chose 2 or 3, OR we're in dispute status → show Accept/Reject (5/6)
-    if (senderChosePartialOrRefund || receipt.status === "dispute") {
+    // DISPUTE: always show Accept/Reject
+    if (receipt.status === "dispute") {
       return (
         <div className="space-y-3">
-          {receipt.sender_decision && (
-            <div className="bg-warning/10 rounded-xl p-4">
-              <p className="text-sm font-semibold text-foreground mb-1">Sender's Decision</p>
-              <p className="text-sm text-muted-foreground">
-                {receipt.sender_decision === "refund"
-                  ? "The sender is requesting a full refund."
-                  : receipt.sender_decision === "release_specific"
-                    ? `The sender wants to release only ${formatNaira(receipt.sender_decision_amount || 0)} of ${formatNaira(receipt.amount)}.`
-                    : `The sender chose: ${receipt.sender_decision}`}
-              </p>
-              {receipt.sender_decision_reason && (
-                <p className="text-xs text-muted-foreground mt-2 italic">"{receipt.sender_decision_reason}"</p>
-              )}
-            </div>
-          )}
-          <p className="text-sm font-medium text-foreground">
-            {receipt.status === "dispute" ? "Change your response:" : "Your response:"}
-          </p>
-          <Button variant="hero" size="lg" className="w-full" onClick={() => startDecision("accept")}>
-            <CheckCircle className="w-5 h-5" /> Accept
+          {receipt.sender_decision && <SenderProposalBanner receipt={receipt} />}
+          <p className="text-sm font-semibold text-foreground">Your response:</p>
+          <Button variant="hero"        size="lg" className="w-full" onClick={() => startDecision("accept")}>
+            <CheckCircle className="w-5 h-5" /> Accept Proposal
           </Button>
           <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("reject")}>
-            <XCircle className="w-5 h-5" /> Reject
+            <XCircle className="w-5 h-5" /> Reject Proposal
           </Button>
+          <p className="text-xs text-center text-muted-foreground">
+            Rejecting keeps the dispute open. The 4-day window continues.
+          </p>
         </div>
       );
     }
 
-    // Default: show "I Have Delivered" (decision 4)
+    // ACTIVE: sender proposed refund/partial → show Accept/Reject regardless of DB receiver_decision
+    if (senderProposed) {
+      return (
+        <div className="space-y-3">
+          <SenderProposalBanner receipt={receipt} />
+          <p className="text-sm font-semibold text-foreground">Your response:</p>
+          <Button variant="hero"        size="lg" className="w-full" onClick={() => startDecision("accept")}>
+            <CheckCircle className="w-5 h-5" /> Accept
+          </Button>
+          <Button variant="destructive" size="lg" className="w-full" onClick={() => startDecision("reject")}>
+            <XCircle className="w-5 h-5" /> Reject (starts dispute)
+          </Button>
+          <p className="text-xs text-center text-muted-foreground">
+            No response in 2 days = auto-executed per sender's terms.
+          </p>
+        </div>
+      );
+    }
+
+    // Receiver made a final decision (accept/reject) — waiting for outcome
+    if (receipt.receiver_decision === "accept" || receipt.receiver_decision === "reject") return null;
+
+    // Receiver already marked as delivered — show confirmation, waiting for sender
+    if (receipt.receiver_decision === "delivered") {
+      return (
+        <div className="bg-accent/10 border border-accent/20 rounded-xl p-4 flex gap-3">
+          <CheckCircle className="w-5 h-5 text-accent shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">You marked this as delivered</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Waiting for the sender to release funds. If they don't respond in 2 days,
+              the payment will be automatically released to you.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Default: no decision yet
     return (
       <div className="space-y-3">
-        <p className="text-sm font-medium text-foreground">Your decision:</p>
+        <p className="text-sm font-semibold text-foreground">Your decision:</p>
         <Button variant="hero" size="lg" className="w-full" onClick={() => startDecision("delivered")}>
           <CheckCircle className="w-5 h-5" /> I Have Delivered
         </Button>
+        <p className="text-xs text-center text-muted-foreground">
+          Tap once you've delivered. The sender will confirm and release funds.
+        </p>
       </div>
     );
   };
 
-  // Decision display
+  // ── Decision display (read-only history) ──────────────────────────────────
   const getDecisionDisplay = () => {
     if (!receipt.sender_decision && !receipt.receiver_decision) return null;
-    const decisionLabels: Record<string, string> = {
-      release_all: "Release Full Payment",
+    const labels: Record<string, string> = {
+      release_all:      "Release Full Payment",
       release_specific: `Release ${formatNaira(receipt.sender_decision_amount || 0)}`,
-      refund: "Full Refund",
-      delivered: "I Have Delivered",
-      accept: "Accepted",
-      reject: "Rejected",
+      refund:           "Full Refund",
+      delivered:        "Delivered",
+      accept:           "Accepted",
+      reject:           "Rejected",
     };
     return (
       <div className="space-y-3">
-        <p className="text-xs text-muted-foreground uppercase tracking-wider">Decisions Made</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Decisions Recorded</p>
         {receipt.sender_decision && (
-          <div className="bg-secondary rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-medium text-primary">Sender</span>
-            </div>
-            <p className="font-semibold text-sm text-foreground">{decisionLabels[receipt.sender_decision] || receipt.sender_decision}</p>
-            {receipt.sender_decision_reason && <p className="text-xs text-muted-foreground mt-1 italic">"{receipt.sender_decision_reason}"</p>}
+          <div className="bg-secondary rounded-xl p-4 border border-border">
+            <span className="text-xs font-semibold text-primary uppercase tracking-wide">Sender's Decision</span>
+            <p className="font-semibold text-foreground mt-1">{labels[receipt.sender_decision] || receipt.sender_decision}</p>
+            {receipt.sender_decision_reason && (
+              <p className="text-xs text-muted-foreground mt-1 italic">"{receipt.sender_decision_reason}"</p>
+            )}
           </div>
         )}
         {receipt.receiver_decision && (
-          <div className="bg-secondary rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-medium text-accent">Receiver</span>
-            </div>
-            <p className="font-semibold text-sm text-foreground">{decisionLabels[receipt.receiver_decision] || receipt.receiver_decision}</p>
-            {receipt.receiver_decision_reason && <p className="text-xs text-muted-foreground mt-1 italic">"{receipt.receiver_decision_reason}"</p>}
+          <div className="bg-secondary rounded-xl p-4 border border-border">
+            <span className="text-xs font-semibold text-accent uppercase tracking-wide">Receiver's Decision</span>
+            <p className="font-semibold text-foreground mt-1">{labels[receipt.receiver_decision] || receipt.receiver_decision}</p>
+            {receipt.receiver_decision_reason && (
+              <p className="text-xs text-muted-foreground mt-1 italic">"{receipt.receiver_decision_reason}"</p>
+            )}
           </div>
         )}
       </div>
     );
   };
 
+  // ── Loading / not-found ────────────────────────────────────────────────────
   if (loading) {
     return (
       <AppLayout showBottomNav>
         <div className="pt-24 pb-16 px-4">
           <div className="container mx-auto max-w-lg animate-pulse space-y-4">
             <div className="h-6 bg-muted rounded w-1/3" />
-            <div className="h-48 bg-muted rounded-2xl" />
+            <div className="h-52 bg-muted rounded-2xl" />
+            <div className="h-12 bg-muted rounded-xl" />
           </div>
         </div>
       </AppLayout>
@@ -527,49 +521,63 @@ const ReceiptView = () => {
   if (!receipt) {
     return (
       <AppLayout showBottomNav>
-        <div className="pt-24 pb-16 px-4 text-center">
-          <p className="text-muted-foreground">Receipt not found</p>
-          <Button variant="hero" asChild className="mt-4">
-            <Link to="/dashboard">Go to Dashboard</Link>
-          </Button>
+        <div className="pt-24 pb-16 px-4 text-center space-y-4">
+          <p className="text-muted-foreground">Receipt not found.</p>
+          <Button variant="hero" asChild><Link to="/dashboard">Go to Dashboard</Link></Button>
         </div>
       </AppLayout>
     );
   }
 
+  const statusCfg     = STATUS_CONFIG[receipt.status] || STATUS_CONFIG.pending;
+  const StatusIcon    = statusCfg.icon;
+  const protectionFee = Number(receipt.protection_fee || 0);
+  const isSettling    = receipt.status === "settling";
+  const needsBank     = receipt.status === "pending_bank_details";
+
   return (
     <AppLayout showBottomNav>
       <div className="pt-24 pb-16 px-4">
         <div className="container mx-auto max-w-lg">
-          <Link to="/dashboard" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6">
+          <Link to="/dashboard"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back
           </Link>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            {/* Receipt card */}
-            <div className="bg-card rounded-2xl shadow-card overflow-hidden">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+
+            {/* ── Receipt card ──────────────────────────────────────────── */}
+            <div className="bg-card rounded-2xl shadow-card overflow-hidden border border-border">
               <div className="bg-gradient-hero p-6 text-primary-foreground">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Shield className="w-5 h-5" />
-                    <span className="font-display font-semibold">Receipt</span>
+                    <span className="font-display font-semibold text-sm">Surer Receipt</span>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-foreground/20">
-                    {receipt.status.charAt(0).toUpperCase() + receipt.status.slice(1)}
-                  </span>
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${statusCfg.bgClass}`}>
+                    {isSettling
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <StatusIcon className="w-3 h-3" />}
+                    {statusCfg.label}
+                  </div>
                 </div>
-                <p className="text-3xl font-display font-bold">{formatNaira(receipt.amount)}</p>
+                <p className="text-4xl font-display font-bold tracking-tight">{formatNaira(receipt.amount)}</p>
+                {receipt.status === "pending" && isSender && protectionFee > 0 && (
+                  <p className="text-sm mt-1.5 opacity-80">
+                    + {formatNaira(protectionFee)} protection fee = <strong>{formatNaira(receipt.amount + protectionFee)}</strong> total
+                  </p>
+                )}
               </div>
 
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-5">
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Description</p>
-                  <p className="font-medium text-foreground">{receipt.description}</p>
+                  <p className="font-semibold text-foreground">{receipt.description}</p>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Receiver</p>
-                    <p className="text-sm font-medium text-foreground">{receipt.receiver_email}</p>
+                    <p className="text-sm font-medium text-foreground break-all">{receipt.receiver_email}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Created</p>
@@ -578,68 +586,192 @@ const ReceiptView = () => {
                     </p>
                   </div>
                 </div>
-              </div>
 
-              <div className="px-6 pb-6">
-                <FeeCalculator amount={receipt.amount} />
+                {/* Pending: fee breakdown for sender */}
+                {receipt.status === "pending" && isSender && protectionFee > 0 && (
+                  <div className="rounded-xl bg-secondary p-4 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Amount to receiver</span>
+                      <span className="font-semibold">{formatNaira(receipt.amount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Protection Fee</span>
+                      <span className="font-semibold">{formatNaira(protectionFee)}</span>
+                    </div>
+                    <div className="border-t border-border pt-2 flex justify-between font-display">
+                      <span className="font-bold">Total you pay</span>
+                      <span className="font-bold text-primary">{formatNaira(receipt.amount + protectionFee)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Active: escrow notice */}
+                {receipt.status === "active" && (
+                  <div className="flex items-start gap-2.5 bg-primary/5 rounded-xl p-3">
+                    <Lock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      <strong className="text-foreground">{formatNaira(receipt.amount)}</strong> is
+                      held safely in Payscrow escrow until both parties agree.
+                    </p>
+                  </div>
+                )}
+
+                {/* Settling: processing notice */}
+                {isSettling && (
+                  <div className="flex items-start gap-2.5 bg-blue-500/5 rounded-xl p-3">
+                    <Loader2 className="w-4 h-4 text-blue-400 shrink-0 mt-0.5 animate-spin" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Settlement is being processed. Funds will arrive in bank accounts shortly.
+                      This page will update automatically.
+                    </p>
+                  </div>
+                )}
+
+                {/* Completed: success notice */}
+                {receipt.status === "completed" && (
+                  <div className="flex items-center gap-2.5 bg-accent/10 rounded-xl p-3">
+                    <CheckCircle className="w-4 h-4 text-accent shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      Settlement complete.
+                      {receipt.paid_at && ` Processed on ${new Date(receipt.paid_at).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" })}.`}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* ── pending_bank_details: actionable prompt ───────────────── */}
+            {needsBank && (
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 space-y-3">
+                <div className="flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-sm text-foreground">Bank Details Required</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {receipt.pending_bank_party === "receiver"
+                        ? "The receiver needs to add their bank account in Settings before funds can be sent."
+                        : receipt.pending_bank_party === "sender"
+                        ? "The sender needs to add their bank account in Settings before the refund can be processed."
+                        : "Both parties need to add their bank account details in Settings."}
+                    </p>
+                  </div>
+                </div>
+                {/* Show retry button to the relevant party */}
+                {((receipt.pending_bank_party === "receiver" && isReceiver) ||
+                  (receipt.pending_bank_party === "sender"   && isSender)   ||
+                  (receipt.pending_bank_party === "both")) && (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1" asChild>
+                      <Link to="/settings">Go to Settings</Link>
+                    </Button>
+                    <Button variant="hero" size="sm" className="flex-1"
+                      onClick={handleRetrySett} disabled={retrying}>
+                      {retrying
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Retrying...</>
+                        : <><RefreshCw className="w-4 h-4" /> Retry Settlement</>}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Decisions recorded ────────────────────────────────────── */}
             {getDecisionDisplay()}
 
+            {/* ── Auto-execute timer ───────────────────────────────────── */}
             {receipt.decision_auto_execute_at && receipt.status === "active" && (
-              <DisputeTimer expiresAt={receipt.decision_auto_execute_at} autoExecuteAt={receipt.decision_auto_execute_at} status="active" />
+              <DisputeTimer
+                expiresAt={receipt.decision_auto_execute_at}
+                autoExecuteAt={receipt.decision_auto_execute_at}
+                status="active"
+              />
             )}
 
+            {/* ── Dispute timer ─────────────────────────────────────────── */}
             {dispute && (receipt.status === "dispute" || receipt.status === "unresolved") && (
-              <DisputeTimer expiresAt={dispute.expires_at} autoExecuteAt={dispute.auto_execute_at} status={dispute.status} />
+              <DisputeTimer
+                expiresAt={dispute.expires_at}
+                autoExecuteAt={dispute.auto_execute_at || dispute.expires_at}
+                status={dispute.status}
+              />
             )}
 
-            {/* Pay Now */}
+            {/* ── Unresolved notice ─────────────────────────────────────── */}
+            {receipt.status === "unresolved" && (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 flex gap-3">
+                <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm text-foreground">Awaiting Admin Decision</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    The 4-day dispute window expired. An admin is reviewing the evidence
+                    and will make a final settlement decision shortly.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ── Pay Now ──────────────────────────────────────────────── */}
             {isSender && receipt.status === "pending" && (
               <Button variant="hero" size="lg" className="w-full" onClick={handlePayNow} disabled={paying}>
-                {paying ? <><Loader2 className="w-5 h-5 animate-spin" /> Initializing...</> : <><CreditCard className="w-5 h-5" /> Pay Now</>}
+                {paying
+                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Initializing...</>
+                  : <><CreditCard className="w-5 h-5" />
+                      Pay {protectionFee > 0 ? formatNaira(receipt.amount + protectionFee) : formatNaira(receipt.amount)} Now
+                    </>}
               </Button>
             )}
 
+            {/* ── Decision buttons ─────────────────────────────────────── */}
             {getSenderActions()}
             {getReceiverActions()}
 
-            {/* Decision form */}
+            {/* ── Decision form ─────────────────────────────────────────── */}
             <AnimatePresence>
               {showDecisionForm && (
                 <motion.form
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
+                  initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
                   onSubmit={handleDecisionFormSubmit}
                   className="space-y-4 bg-card rounded-2xl shadow-card p-6 border border-border"
                 >
                   <h3 className="font-display font-semibold text-foreground">
-                    {decisionType === "release_specific" ? "Release Specific Amount" :
-                     decisionType === "refund" ? "Request Refund" : "Reject Decision"}
+                    {decisionType === "release_specific" ? "Release a Specific Amount" :
+                     decisionType === "refund"           ? "Request Full Refund" : "Reject Proposal"}
                   </h3>
 
                   {decisionType === "release_specific" && (
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground">Amount to release (₦)</label>
-                      <Input type="number" min={1000} max={receipt.amount} placeholder="Amount" value={decisionAmount} onChange={(e) => setDecisionAmount(e.target.value)} required className="h-12 text-lg font-semibold" />
+                      <Input type="number" min={1} max={receipt.amount}
+                        placeholder={`Up to ${formatNaira(receipt.amount)}`}
+                        value={decisionAmount} onChange={e => setDecisionAmount(e.target.value)}
+                        required className="h-12 text-lg font-semibold" />
+                      {decisionAmount && parseFloat(decisionAmount) < receipt.amount && (
+                        <p className="text-xs text-muted-foreground">
+                          Receiver gets {formatNaira(parseFloat(decisionAmount))},
+                          you get {formatNaira(receipt.amount - parseFloat(decisionAmount))} back.
+                        </p>
+                      )}
                     </div>
                   )}
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Reason</label>
-                    <Textarea placeholder="Explain your decision..." value={decisionReason} onChange={(e) => setDecisionReason(e.target.value)} required rows={3} />
+                    <label className="text-sm font-medium text-foreground">
+                      {decisionType === "reject" ? "Why are you rejecting?" : "Reason"}
+                    </label>
+                    <Textarea placeholder="Explain clearly so the other party understands..."
+                      value={decisionReason} onChange={e => setDecisionReason(e.target.value)} required rows={3} />
                   </div>
 
                   <div className="space-y-3">
-                    <label className="text-sm font-medium text-foreground">Evidence (optional)</label>
+                    <label className="text-sm font-medium text-foreground">
+                      Evidence <span className="text-muted-foreground font-normal">(optional but recommended)</span>
+                    </label>
                     <div className="flex gap-3">
                       <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="flex-1">
-                        <Upload className="w-4 h-4" /> Upload
+                        <Upload className="w-4 h-4" /> Upload Photo
                       </Button>
                       <Button type="button" variant="outline" size="sm" onClick={() => cameraInputRef.current?.click()} className="flex-1">
-                        <Camera className="w-4 h-4" /> Camera
+                        <Camera className="w-4 h-4" /> Take Photo
                       </Button>
                     </div>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
@@ -649,7 +781,8 @@ const ReceiptView = () => {
                         {decisionPreviews.map((url, i) => (
                           <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
                             <img src={url} alt={`Evidence ${i + 1}`} className="w-full h-full object-cover" />
-                            <button type="button" onClick={() => removeFile(i)} className="absolute top-1 right-1 w-6 h-6 rounded-full bg-destructive flex items-center justify-center">
+                            <button type="button" onClick={() => removeFile(i)}
+                              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-destructive flex items-center justify-center">
                               <X className="w-3 h-3 text-destructive-foreground" />
                             </button>
                           </div>
@@ -658,68 +791,92 @@ const ReceiptView = () => {
                     )}
                   </div>
 
-                  <div className="flex gap-3">
-                    <Button type="button" variant="outline" size="lg" className="flex-1" onClick={() => setShowDecisionForm(false)}>Cancel</Button>
-                    <Button type="submit" variant="hero" size="lg" className="flex-1" disabled={submittingDecision}>
-                      {submittingDecision ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit"}
+                  <div className="flex gap-3 pt-1">
+                    <Button type="button" variant="outline" size="lg" className="flex-1"
+                      onClick={() => setShowDecisionForm(false)}>Cancel</Button>
+                    <Button type="submit" size="lg" className="flex-1"
+                      variant={decisionType === "reject" ? "destructive" : "hero"}
+                      disabled={submittingDecision}>
+                      {submittingDecision ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> :
+                       decisionType === "reject" ? "Reject" : "Submit"}
                     </Button>
                   </div>
                 </motion.form>
               )}
             </AnimatePresence>
 
-            {/* Edit pending receipt */}
+            {/* ── Edit pending receipt ──────────────────────────────────── */}
             {receipt.status === "pending" && isCreator && !editing && (
-              <Button variant="outline" size="lg" className="w-full" onClick={() => {
-                setEditAmount(receipt.amount.toString());
-                setEditDescription(receipt.description);
-                setEditing(true);
-              }}>
+              <Button variant="outline" size="lg" className="w-full"
+                onClick={() => { setEditAmount(receipt.amount.toString()); setEditDescription(receipt.description); setEditing(true); }}>
                 <Edit className="w-5 h-5" /> Edit Receipt
               </Button>
             )}
-
             {editing && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3 bg-card rounded-2xl p-6 shadow-card border border-border">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="space-y-3 bg-card rounded-2xl p-6 shadow-card border border-border">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Amount (₦)</label>
-                  <Input type="number" min={1000} value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className="h-12" />
+                  <Input type="number" min={1000} value={editAmount} onChange={e => setEditAmount(e.target.value)} className="h-12" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Description</label>
-                  <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
+                  <Textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={3} />
                 </div>
                 <div className="flex gap-3">
                   <Button variant="outline" className="flex-1" onClick={() => setEditing(false)}>Cancel</Button>
                   <Button variant="hero" className="flex-1" onClick={handleUpdate} disabled={saving}>
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Changes"}
                   </Button>
                 </div>
               </motion.div>
             )}
 
+            {/* ── Delete ───────────────────────────────────────────────── */}
             {receipt.status === "pending" && isCreator && (
               <Button variant="destructive" size="lg" className="w-full" onClick={handleDelete}>
                 <Trash2 className="w-5 h-5" /> Delete Receipt
               </Button>
             )}
 
+            {/* ── Copy link ─────────────────────────────────────────────── */}
             <Button variant="secondary" className="w-full" onClick={handleCopyLink}>
               <Copy className="w-4 h-4" /> Copy Receipt Link
             </Button>
+
           </motion.div>
         </div>
       </div>
 
       <PinVerifyDialog
-        open={pinOpen}
-        onOpenChange={setPinOpen}
+        open={pinOpen} onOpenChange={setPinOpen}
         onVerified={() => { if (pendingAction) pendingAction(); setPendingAction(null); }}
-        title={pinTitle}
-        description={pinDesc}
+        title={pinTitle} description={pinDesc}
       />
     </AppLayout>
   );
 };
+
+// ── Sub-component: Sender's proposal banner ────────────────────────────────
+const SenderProposalBanner = ({ receipt }: { receipt: any }) => (
+  <div className="bg-warning/10 border border-warning/20 rounded-xl p-4">
+    <div className="flex items-center gap-2 mb-2">
+      <Info className="w-4 h-4 text-warning shrink-0" />
+      <p className="text-sm font-semibold text-foreground">Sender's Proposal</p>
+    </div>
+    <p className="text-sm text-muted-foreground">
+      {receipt.sender_decision === "refund"
+        ? "The sender is requesting a full refund of this payment."
+        : receipt.sender_decision === "release_specific"
+          ? `The sender wants to release ${formatNaira(receipt.sender_decision_amount || 0)} of ${formatNaira(receipt.amount)}.`
+          : "The sender wants to release the full payment to you."}
+    </p>
+    {receipt.sender_decision_reason && (
+      <p className="text-xs text-muted-foreground mt-2 italic border-t border-warning/20 pt-2">
+        "{receipt.sender_decision_reason}"
+      </p>
+    )}
+  </div>
+);
 
 export default ReceiptView;

@@ -1,13 +1,5 @@
--- ============================================================
--- MIGRATION: 20260212230549_657661dc-8c1f-4586-b7fc-e26e9306b155
--- ============================================================
-
--- Storage bucket for evidence (using extensions)
 CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA extensions;
-
--- ============================================================
--- MIGRATION: 20260213065549_727d4bfc-1e68-44b8-bcd9-59ba4e17d671
--- ============================================================
+CREATE EXTENSION IF NOT EXISTS "pg_cron" WITH SCHEMA extensions;
 
 -- 1. User roles (no deps)
 CREATE TABLE public.user_roles (
@@ -28,6 +20,8 @@ CREATE TABLE public.profiles (
   bank_name TEXT,
   account_number TEXT,
   account_name TEXT,
+  bank_code text,
+  webauthn_credential text,
   fingerprint_enabled BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
@@ -49,6 +43,12 @@ CREATE TABLE public.receipts (
   payscrow_fee DECIMAL DEFAULT 0,
   payscrow_transaction_ref TEXT,
   payscrow_transaction_number TEXT,
+   sender_decision text,
+ sender_decision_reason text,
+ sender_decision_amount numeric,
+ receiver_decision text,
+ receiver_decision_reason text,
+ decision_auto_execute_at timestamptz,
   escrow_code TEXT,
   paid_at TIMESTAMP WITH TIME ZONE,
   amount_paid DECIMAL,
@@ -112,38 +112,4 @@ CREATE TRIGGER update_receipts_updated_at BEFORE UPDATE ON public.receipts FOR E
 INSERT INTO storage.buckets (id, name, public) VALUES ('evidence', 'evidence', true) ON CONFLICT (id) DO NOTHING;
 -- Policies managed manually (all permissions allowed)
 
--- ============================================================
--- MIGRATION: 20260214052606_fe513013-d330-460f-ad36-834f8e240e78
--- ============================================================
 
--- Add decision tracking columns to receipts
-ALTER TABLE public.receipts
-ADD COLUMN IF NOT EXISTS sender_decision text,
-ADD COLUMN IF NOT EXISTS sender_decision_reason text,
-ADD COLUMN IF NOT EXISTS sender_decision_amount numeric,
-ADD COLUMN IF NOT EXISTS receiver_decision text,
-ADD COLUMN IF NOT EXISTS receiver_decision_reason text,
-ADD COLUMN IF NOT EXISTS decision_auto_execute_at timestamptz;
-
-
--- ============================================================
--- MIGRATION: 20260216131815_44096293-9882-48bb-9422-ff26db955536
--- ============================================================
-
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bank_code text;
-
-
--- ============================================================
--- MIGRATION: 20260224120000_add_spam_webauthn_columns
--- ============================================================
-
--- Add spam fee tracking and WebAuthn credential storage
-
-ALTER TABLE public.receipts
-  ADD COLUMN IF NOT EXISTS spam_fee_paid boolean DEFAULT false,
-  ADD COLUMN IF NOT EXISTS spam_fee_reference text,
-  ADD COLUMN IF NOT EXISTS spam_fee_decision text,
-  ADD COLUMN IF NOT EXISTS spam_fee_amount numeric;
-
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS webauthn_credential text;
