@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/supabase";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useBankStatus } from "@/hooks/useBankStatus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status config — includes settling + pending_bank_details
@@ -66,6 +67,7 @@ const ReceiptView = () => {
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [pinTitle,      setPinTitle]      = useState("");
   const [pinDesc,       setPinDesc]       = useState("");
+  const { hasBankDetails } = useBankStatus();
 
   const requirePin = (title: string, desc: string, action: () => void) => {
     setPinTitle(title); setPinDesc(desc);
@@ -628,15 +630,41 @@ const ReceiptView = () => {
                 )}
 
                 {/* Completed: success notice */}
-                {receipt.status === "completed" && (
-                  <div className="flex items-center gap-2.5 bg-accent/10 rounded-xl p-3">
-                    <CheckCircle className="w-4 h-4 text-accent shrink-0" />
-                    <p className="text-xs text-muted-foreground">
-                      Settlement complete.
-                      {receipt.paid_at && ` Processed on ${new Date(receipt.paid_at).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" })}.`}
-                    </p>
-                  </div>
-                )}
+              {receipt.status === "completed" && (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2.5 bg-accent/10 rounded-xl p-3">
+        <CheckCircle className="w-4 h-4 text-accent shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          Settlement complete.
+          {receipt.paid_at &&
+            ` Processed on ${new Date(receipt.paid_at).toLocaleDateString("en-NG", {
+              month: "short", day: "numeric", year: "numeric",
+            })}.`}
+        </p>
+      </div>
+
+      {// Show this notice ONLY to the receiver if they have no bank details set
+       // Funds may be awaiting them but can't be sent without an account
+       isReceiver && !hasBankDetails && (
+        <div className="bg-warning/10 border border-warning/20 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Add your bank details</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                This receipt is complete. If funds are owed to you, they cannot be sent
+                without your bank account details. Add them in Settings, then contact support
+                or the admin will process your settlement shortly.
+              </p>
+            </div>
+          </div>
+          <Button variant="hero" size="sm" className="w-full" asChild>
+            <Link to="/settings">Go to Settings → Add Bank Details</Link>
+          </Button>
+        </div>
+      )}
+    </div>
+  )}
               </div>
             </div>
 

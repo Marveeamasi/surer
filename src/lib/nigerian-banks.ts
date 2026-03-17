@@ -21,12 +21,4 @@ export const NIGERIAN_BANKS = [
   { name: "Unity Bank", code: "215" },
   { name: "Wema Bank", code: "035" },
   { name: "Zenith Bank", code: "057" },
-] as const;
-
-export const getBankName = (code: string): string => {
-  return NIGERIAN_BANKS.find((b) => b.code === code)?.name || code;
-};
-
-export const getBankCode = (name: string): string => {
-  return NIGERIAN_BANKS.find((b) => b.name === name)?.code || "";
-};
+];
