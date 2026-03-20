@@ -1,7 +1,6 @@
-import { Shield } from "lucide-react";
-import { Link } from "react-router-dom";
 import payscrowLogo from "@/assets/partners/payscrow.svg";
-import paystackLogo from "@/assets/partners/paystack.svg";
+import interswitchLogo from "@/assets/partners/interswitch.svg";
+import psbLogo from "@/assets/partners/9psb.svg";
 
 const partners = [
   {
@@ -9,14 +8,21 @@ const partners = [
     image: payscrowLogo,
     alt: "Payscrow Escrow",
     description:
-      "Escrow infrastructure that ensures your money is only released when you confirm delivery.",
+      "the escrow infrastructure that ensures your money is only released when you confirm delivery.",
   },
   {
-    name: "Paystack",
-    image: paystackLogo,
-    alt: "Paystack Payments",
+    name: "Interswitch",
+    image: interswitchLogo,
+    alt: "Interswitch Payments",
     description:
-      "Fast, secure payments and verified sub-accounts for seamless checkout.",
+      "Number one payment processor in Nigeria, for your fast and secure transactions.",
+  },
+  {
+    name: "Transfers to 9PSB bank",
+    image: psbLogo,
+    alt: "Transfers to 9PSB bank",
+    description:
+      "For your transfer method to pay someone, transfers are made to 9PSB bank accounts (9 Payment Service Banks)",
   },
 ];
 
@@ -44,7 +50,7 @@ const Footer = () => (
                     alt={partner.alt}
                     draggable={false}
                     className="
-                      max-h-6 w-24 object-cover
+                      max-h-10 w-24 object-cover
                       opacity-80 grayscale
                       transition-all duration-200
                       hover:opacity-100 hover:grayscale-0

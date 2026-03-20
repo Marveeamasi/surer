@@ -208,31 +208,15 @@ const Index = () => {
               <div className="flex justify-between items-center py-3 border-b border-border">
                 <div>
                   <p className="font-semibold text-foreground">
-                    Protection Fee (Surer)
+                    Protection Fee
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Your safety guarantee
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-display font-bold text-primary">1.5%</p>
-                  <p className="text-xs text-muted-foreground">Max ₦700</p>
-                </div>
-              </div>
-              <div className="flex justify-between items-center py-3">
-                <div>
-                  <p className="font-semibold text-foreground">
-                    Transaction Fee (Payscrow)
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Secure payment processing
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-display font-bold text-primary">
-                    2% + ₦100
-                  </p>
-                  <p className="text-xs text-muted-foreground">Max ₦1,000</p>
+                  <p className="font-display font-bold text-primary">3.5% + 100</p>
+                  <p className="text-xs text-muted-foreground">Max ₦2000</p>
                 </div>
               </div>
             </div>
@@ -241,7 +225,7 @@ const Index = () => {
                 Example: On a ₦100,000 transaction
               </p>
               <p className="font-display text-2xl font-bold text-accent mt-1">
-                Total fees: ₦1,700
+                Just pay: ₦102,000
               </p>
             </div>
           </motion.div>

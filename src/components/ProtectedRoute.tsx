@@ -1,10 +1,11 @@
 import { ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Shield } from "lucide-react";
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -20,7 +21,12 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    // Encode the full path (including any search params) as the redirect destination
+    // e.g. /receipt/abc123 → /auth?redirect=%2Freceipt%2Fabc123
+    const redirect = encodeURIComponent(
+      location.pathname + location.search + location.hash
+    );
+    return <Navigate to={`/auth?redirect=${redirect}`} replace />;
   }
 
   return <>{children}</>;

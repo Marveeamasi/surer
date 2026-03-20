@@ -1,21 +1,44 @@
 /**
  * Settings.tsx
  *
- * UX FIXES:
- * 1. Validation runs BEFORE the PIN dialog opens — user never enters PIN then
- *    gets an error. All checks happen on the Save button click.
- * 2. Fields do NOT clear on successful save — they stay populated as saved.
- *    State is updated locally after a successful DB write so no refresh needed.
- * 3. Phone number field lives inside Bank Details section (required with bank).
- *    Cannot save bank details without phone. Cannot save phone without bank.
- * 4. Bank list comes from Payscrow live API via useBanks() hook (cached).
+ * FIXES IN THIS VERSION:
+ *
+ * 1. FINGERPRINT IS FULLY INDEPENDENT
+ *    - Toggling fingerprint on/off saves to DB immediately — no need to click "Save Settings"
+ *    - handleSave / executeSave no longer touch fingerprint_enabled at all
+ *    - validateBeforeSave no longer checks fingerprint state
+ *
+ * 2. FINGERPRINT IS MOBILE-ONLY
+ *    - Detected via useIsMobile() hook + window.PublicKeyCredential platform check
+ *    - On desktop: switch is disabled, shows "Available on mobile only" message
+ *    - No confusing passkey device picker on desktop
+ *
+ * 3. FINGERPRINT GOES STRAIGHT TO DEVICE BIOMETRICS
+ *    - authenticatorAttachment: "platform" forces the device's own sensor
+ *      (fingerprint scanner / Face ID) — skips the "choose a device" picker entirely
+ *    - On Android: fingerprint/face unlock pops up immediately
+ *    - On iPhone: Face ID / Touch ID pops up immediately
+ *
+ * 4. FIELDS PERSIST AFTER SAVE
+ *    - State is already correct after save — no refetch needed, no flicker
+ *    - fingerprintEnabled state stays accurate because it's managed independently
+ *
+ * 5. SAVE BUTTON ONLY HANDLES BANK + PHONE
+ *    - Fingerprint has its own save path
+ *    - Theme has its own instant save (already worked)
+ *    - PIN has its own save path (already worked)
  */
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, CreditCard, KeyRound, Mail, Fingerprint, Loader2, Moon, Sun, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { ChevronsUpDown, Check } from "lucide-react";
+import {
+  LogOut, CreditCard, KeyRound, Mail, Fingerprint,
+  Loader2, Moon, Sun, AlertCircle, CheckCircle2, Smartphone,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { motion } from "framer-motion";
 import AppLayout from "@/components/AppLayout";
@@ -28,29 +51,35 @@ import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { useBanks } from "@/hooks/useBanks";
 import { isValidNigerianPhone } from "@/hooks/usePhoneNumber";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const WEBAUTHN_CRED_KEY = "surer_webauthn_cred";
 
-const bufToBase64 = (buffer: ArrayBuffer) => {
+const bufToBase64 = (buffer: ArrayBuffer): string => {
   let binary = "";
-  const bytes = new Uint8Array(buffer);
-  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  new Uint8Array(buffer).forEach((b) => (binary += String.fromCharCode(b)));
   return btoa(binary);
 };
 
 const Settings = () => {
   const { user, signOut } = useAuth();
-  const navigate          = useNavigate();
+  const navigate           = useNavigate();
   const { theme, setTheme } = useTheme();
   const { banks, loading: banksLoading } = useBanks();
+  const isMobile = useIsMobile();
 
-  const [bankCode,       setBankCode]       = useState("");
-  const [accountNumber,  setAccountNumber]  = useState("");
-  const [accountName,    setAccountName]    = useState("");
-  const [phoneNumber,    setPhoneNumber]    = useState("");
-  const [fingerprintEnabled, setFingerprintEnabled] = useState(false);
-  const [saving,         setSaving]         = useState(false);
+  // Bank + phone fields
+  const [bankCode,      setBankCode]      = useState("");
+  const [bankOpen,      setBankOpen]      = useState(false); // combobox open state
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountName,   setAccountName]   = useState("");
+  const [phoneNumber,   setPhoneNumber]   = useState("");
+  const [saving,        setSaving]        = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Fingerprint — managed independently from bank save
+  const [fingerprintEnabled,  setFingerprintEnabled]  = useState(false);
+  const [savingFingerprint,   setSavingFingerprint]   = useState(false);
 
   // PIN change
   const [showPinChange, setShowPinChange] = useState(false);
@@ -70,105 +99,70 @@ const Settings = () => {
     setPendingAction(() => action); setPinOpen(true);
   };
 
-  // ── Load profile (once on mount) ──────────────────────────────────────────
+  // ── Load profile ──────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
       const { data } = await db.from("profiles").select("*").eq("id", user.id).maybeSingle();
       if (data) {
-        setBankCode(data.bank_code      || "");
+        setBankCode(data.bank_code       || "");
         setAccountNumber(data.account_number || "");
         setAccountName(data.account_name     || "");
         setPhoneNumber(data.phone_number     || "");
-        setFingerprintEnabled(data.fingerprint_enabled || false);
+        // Fingerprint: DB value AND localStorage credential must both be present
+        const hasCred = !!localStorage.getItem(WEBAUTHN_CRED_KEY);
+        setFingerprintEnabled((data.fingerprint_enabled || false) && hasCred);
       }
       setLoadingProfile(false);
     };
     fetchProfile();
   }, [user]);
 
-  // ── Derived validation state ──────────────────────────────────────────────
-  const phoneRaw     = phoneNumber.replace(/\s/g, "");
-  const phoneValid   = isValidNigerianPhone(phoneRaw);
+  // ── Derived validation ────────────────────────────────────────────────────
+  const phoneRaw    = phoneNumber.replace(/\s/g, "");
+  const phoneValid  = isValidNigerianPhone(phoneRaw);
   const phoneTouched = phoneNumber.length > 0;
 
   const bankFieldsAllEmpty =
     !bankCode && !accountNumber && !accountName && !phoneNumber;
 
   const bankFieldsPartiallyFilled =
-    !bankFieldsAllEmpty && !(bankCode && accountNumber.length === 10 && accountName.trim() && phoneRaw && phoneValid);
+    !bankFieldsAllEmpty &&
+    !(bankCode && accountNumber.length === 10 && accountName.trim() && phoneRaw && phoneValid);
 
-  // ── Validate everything BEFORE opening PIN dialog ─────────────────────────
-  // This is the key UX fix — user never enters their PIN then gets an error.
+  // ── Validate bank fields BEFORE opening PIN ───────────────────────────────
   const validateBeforeSave = (): boolean => {
-    if (fingerprintEnabled && !localStorage.getItem(WEBAUTHN_CRED_KEY)) {
-      toast.error("Please register your fingerprint before saving");
-      return false;
-    }
-
-    // Bank section: if any field is touched, all must be complete
     if (!bankFieldsAllEmpty) {
-      if (!bankCode) {
-        toast.error("Please select your bank");
-        return false;
-      }
-      if (accountNumber.length !== 10) {
-        toast.error("Account number must be exactly 10 digits");
-        return false;
-      }
-      if (!accountName.trim()) {
-        toast.error("Please enter your account name");
-        return false;
-      }
-      if (!phoneRaw) {
-        toast.error("Phone number is required when saving bank details");
-        return false;
-      }
-      if (!phoneValid) {
-        toast.error("Phone must start with 070, 080, 081, 090 or 091 and be 11 digits");
-        return false;
-      }
+      if (!bankCode) { toast.error("Please select your bank"); return false; }
+      if (accountNumber.length !== 10) { toast.error("Account number must be exactly 10 digits"); return false; }
+      if (!accountName.trim()) { toast.error("Please enter your account name"); return false; }
+      if (!phoneRaw) { toast.error("Phone number is required with bank details"); return false; }
+      if (!phoneValid) { toast.error("Phone must start with 070, 080, 081, 090 or 091 and be 11 digits"); return false; }
     }
-
     return true;
   };
 
-  // ── Execute save (called after PIN verified) ──────────────────────────────
+  // ── Save bank + phone ONLY (fingerprint is NOT included here) ─────────────
   const executeSave = async () => {
     if (!user) return;
     setSaving(true);
-
     const selectedBank = banks.find((b) => b.code === bankCode);
-    const { error } = await db
-      .from("profiles")
-      .update({
-        bank_name:           selectedBank?.name || null,
-        bank_code:           bankCode           || null,
-        account_number:      accountNumber      || null,
-        account_name:        accountName        || null,
-        // Only save phone if bank details are also present
-        phone_number:        bankFieldsAllEmpty ? null : phoneRaw || null,
-        fingerprint_enabled: fingerprintEnabled,
-      })
-      .eq("id", user.id);
-
+    const { error } = await db.from("profiles").update({
+      bank_name:      selectedBank?.name || null,
+      bank_code:      bankCode           || null,
+      account_number: accountNumber      || null,
+      account_name:   accountName        || null,
+      phone_number:   bankFieldsAllEmpty ? null : phoneRaw || null,
+      // fingerprint_enabled is NOT saved here — it has its own independent path
+    }).eq("id", user.id);
     setSaving(false);
-
-    if (error) {
-      toast.error("Failed to save settings. Please try again.");
-      return;
-    }
-
-    // ── KEY FIX: Do NOT clear fields. Keep state as-is so user sees what saved. ──
-    // The state already reflects what was saved — no need to reset or refetch.
-    toast.success("Settings saved!");
+    if (error) { toast.error("Failed to save. Please try again."); return; }
+    toast.success("Bank details saved!");
   };
 
-  // ── Handle Save button click ──────────────────────────────────────────────
-  // Validate first. If valid, open PIN. If not, show error — no PIN shown.
   const handleSave = () => {
-    if (!validateBeforeSave()) return; // ← Validation happens HERE, before PIN
-    requirePin("Confirm Changes", "Enter your PIN to save your settings.", executeSave);
+    if (!validateBeforeSave()) return;
+    requirePin("Confirm Changes", "Enter your PIN to save your bank details.", executeSave);
   };
 
   // ── PIN change ─────────────────────────────────────────────────────────────
@@ -181,11 +175,7 @@ const Settings = () => {
     const { error: verifyError } = await supabase.auth.signInWithPassword({
       email: user!.email!, password: currentPin,
     });
-    if (verifyError) {
-      toast.error("Current PIN is incorrect");
-      setChangingPin(false);
-      return;
-    }
+    if (verifyError) { toast.error("Current PIN is incorrect"); setChangingPin(false); return; }
     const { error } = await supabase.auth.updateUser({ password: newPin });
     setChangingPin(false);
     if (error) toast.error("Failed to update PIN");
@@ -198,50 +188,125 @@ const Settings = () => {
 
   const handleSignOut = async () => { await signOut(); navigate("/"); };
 
-  // ── Fingerprint ────────────────────────────────────────────────────────────
+  // ── Fingerprint toggle — saves to DB immediately, fully independent ────────
+  //
+  // KEY CHANGES:
+  // 1. authenticatorAttachment: "platform" → goes straight to device biometrics
+  //    (fingerprint sensor / Face ID). No "choose a device" picker.
+  // 2. Saves fingerprint_enabled to DB immediately after credential created.
+  //    No need to click "Save Settings".
+  // 3. Disabling also saves to DB immediately.
+  // 4. Only available on mobile (isMobile check + platform authenticator).
   const handleFingerprintToggle = async (enabled: boolean) => {
     if (!user) return;
+
+    // Guard: mobile only
+    if (!isMobile) {
+      toast.error("Fingerprint login is only available on mobile devices.");
+      return;
+    }
+
     if (enabled) {
+      // Check platform biometric support
       if (!window.PublicKeyCredential) {
         toast.error("Biometrics not supported on this device");
         return;
       }
+
+      setSavingFingerprint(true);
       try {
         const challenge = new Uint8Array(32);
         window.crypto.getRandomValues(challenge);
+
+        // authenticatorAttachment: "platform" is the key setting.
+        // This tells the browser to use ONLY the device's built-in authenticator
+        // (fingerprint sensor, Face ID, Windows Hello) — never an external key or
+        // cross-device picker. The device's native biometric UI appears immediately.
         const cred: any = await navigator.credentials.create({
           publicKey: {
             challenge,
-            rp: { name: "Surer" },
+            rp: { name: "Surer", id: window.location.hostname },
             user: {
-              id: new TextEncoder().encode(user.id),
-              name: user.email || "",
+              id:          new TextEncoder().encode(user.id),
+              name:        user.email || "",
               displayName: user.email || "",
             },
-            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+            pubKeyCredParams: [
+              { type: "public-key", alg: -7  }, // ES256
+              { type: "public-key", alg: -257 }, // RS256 (wider device support)
+            ],
             timeout: 60000,
-            authenticatorSelection: { userVerification: "required" },
+            authenticatorSelection: {
+              authenticatorAttachment: "platform", // ← device biometrics only, no picker
+              userVerification:        "required", // ← must verify with biometric
+              requireResidentKey:      false,
+            },
             attestation: "none",
           },
         } as any);
+
         if (cred) {
+          // Save credential to localStorage (device-specific)
           const rawId = bufToBase64(cred.rawId as ArrayBuffer);
           localStorage.setItem(WEBAUTHN_CRED_KEY, JSON.stringify({ id: rawId, type: cred.type }));
+
+          // ── Save to DB immediately — no need to click "Save Settings" ────
+          const { error } = await db.from("profiles")
+            .update({ fingerprint_enabled: true })
+            .eq("id", user.id);
+
+          if (error) {
+            toast.error("Fingerprint registered but failed to save. Please try again.");
+            localStorage.removeItem(WEBAUTHN_CRED_KEY);
+            setSavingFingerprint(false);
+            return;
+          }
+
           setFingerprintEnabled(true);
-          toast.success("Fingerprint registered. Save settings to apply.");
+          toast.success("✅ Fingerprint login enabled!");
         }
-      } catch (e) {
-        console.error("WebAuthn error", e);
-        toast.error("Failed to register fingerprint");
+      } catch (e: any) {
+        // User cancelled the biometric prompt or device doesn't support it
+        if (e?.name === "NotAllowedError") {
+          toast.error("Fingerprint registration was cancelled.");
+        } else if (e?.name === "NotSupportedError") {
+          toast.error("This device doesn't support biometric authentication.");
+        } else {
+          console.error("WebAuthn error:", e);
+          toast.error("Failed to register fingerprint. Please try again.");
+        }
         setFingerprintEnabled(false);
       }
+      setSavingFingerprint(false);
+
     } else {
-      setFingerprintEnabled(false);
-      localStorage.removeItem(WEBAUTHN_CRED_KEY);
-      toast.success("Fingerprint authentication disabled");
+      // ── Disable fingerprint — save to DB immediately ──────────────────
+      setSavingFingerprint(true);
+      try {
+        const { error } = await db.from("profiles")
+          .update({ fingerprint_enabled: false })
+          .eq("id", user.id);
+
+        if (error) {
+          toast.error("Failed to disable fingerprint. Please try again.");
+          setSavingFingerprint(false);
+          return;
+        }
+
+        // Clear local credential
+        localStorage.removeItem(WEBAUTHN_CRED_KEY);
+        setFingerprintEnabled(false);
+        toast.success("Fingerprint login disabled.");
+      } catch {
+        toast.error("Failed to disable fingerprint. Please try again.");
+      }
+      setSavingFingerprint(false);
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <AppLayout showBottomNav>
       <div className="pt-24 pb-16 px-4">
@@ -253,7 +318,7 @@ const Settings = () => {
               <p className="text-sm text-muted-foreground">{user?.email}</p>
             </div>
 
-            {/* Theme */}
+            {/* ── Theme ───────────────────────────────────────────────── */}
             <div className="flex items-center justify-between bg-card rounded-xl p-4 shadow-soft border border-border">
               <div className="flex items-center gap-3">
                 {theme === "dark" ? <Moon className="w-5 h-5 text-primary" /> : <Sun className="w-5 h-5 text-primary" />}
@@ -265,7 +330,7 @@ const Settings = () => {
               <Switch checked={theme === "dark"} onCheckedChange={(c) => setTheme(c ? "dark" : "light")} />
             </div>
 
-            {/* Email */}
+            {/* ── Email ───────────────────────────────────────────────── */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-foreground">
                 <Mail className="w-4 h-4" />
@@ -277,7 +342,7 @@ const Settings = () => {
               </div>
             </div>
 
-            {/* PIN */}
+            {/* ── PIN ─────────────────────────────────────────────────── */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-foreground">
                 <KeyRound className="w-4 h-4" />
@@ -317,22 +382,40 @@ const Settings = () => {
               )}
             </div>
 
-            {/* Fingerprint */}
-            <div className="flex items-center justify-between bg-card rounded-xl p-4 shadow-soft border border-border">
+            {/* ── Fingerprint — mobile only, saves immediately ─────────── */}
+            <div className={`flex items-center justify-between bg-card rounded-xl p-4 shadow-soft border border-border ${!isMobile ? "opacity-60" : ""}`}>
               <div className="flex items-center gap-3">
-                <Fingerprint className="w-5 h-5 text-primary" />
+                <Fingerprint className={`w-5 h-5 ${isMobile ? "text-primary" : "text-muted-foreground"}`} />
                 <div>
                   <p className="font-medium text-foreground text-sm">Fingerprint Login</p>
-                  <p className="text-xs text-muted-foreground">Use biometrics instead of PIN (device-specific)</p>
+                  {isMobile ? (
+                    <p className="text-xs text-muted-foreground">
+                      {savingFingerprint
+                        ? "Saving..."
+                        : fingerprintEnabled
+                          ? "Enabled — tap to disable"
+                          : "Tap to enable biometric login"}
+                    </p>
+                  ) : (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Smartphone className="w-3 h-3 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">Available on mobile only</p>
+                    </div>
+                  )}
                 </div>
               </div>
-              <Switch checked={fingerprintEnabled} onCheckedChange={handleFingerprintToggle} />
+              {savingFingerprint ? (
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              ) : (
+                <Switch
+                  checked={fingerprintEnabled}
+                  onCheckedChange={handleFingerprintToggle}
+                  disabled={!isMobile || savingFingerprint}
+                />
+              )}
             </div>
 
-            {/* ── Bank Details + Phone ────────────────────────────────────
-                Phone lives here. Required with bank details.
-                Both are saved together or not at all.
-            ─────────────────────────────────────────────────────────── */}
+            {/* ── Bank Details + Phone ─────────────────────────────────── */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-foreground">
                 <CreditCard className="w-4 h-4" />
@@ -343,20 +426,61 @@ const Settings = () => {
               </p>
 
               <div className="space-y-3">
-                {/* Bank */}
+                {/* Bank select — searchable combobox */}
                 {banksLoading ? (
                   <div className="h-12 bg-muted rounded-lg animate-pulse" />
                 ) : (
-                  <Select value={bankCode} onValueChange={setBankCode}>
-                    <SelectTrigger className="h-12">
-                      <SelectValue placeholder="Select your bank" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {banks.map((bank) => (
-                        <SelectItem key={bank.code} value={bank.code}>{bank.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={bankOpen} onOpenChange={setBankOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={bankOpen}
+                        className="w-full h-12 justify-between font-normal text-sm"
+                      >
+                        <span className={bankCode ? "text-foreground" : "text-muted-foreground"}>
+                          {bankCode
+                            ? banks.find((b) => b.code === bankCode)?.name
+                            : "Select your bank"}
+                        </span>
+                        <ChevronsUpDown className="w-4 h-4 shrink-0 text-muted-foreground ml-2" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="p-0 w-[--radix-popover-trigger-width]"
+                      align="start"
+                      side="bottom"
+                      sideOffset={4}
+                    >
+                      <Command>
+                        {/* Built-in fuzzy search — filters as you type */}
+                        <CommandInput placeholder="Search bank..." className="h-11" />
+                        <CommandList className="max-h-60">
+                          <CommandEmpty>No bank found.</CommandEmpty>
+                          <CommandGroup>
+                            {banks.map((bank) => (
+                              <CommandItem
+                                key={bank.code}
+                                value={bank.name} // cmdk searches on this value
+                                onSelect={() => {
+                                  setBankCode(bank.code);
+                                  setBankOpen(false);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <Check
+                                  className={`w-4 h-4 mr-2 shrink-0 ${
+                                    bankCode === bank.code ? "opacity-100 text-primary" : "opacity-0"
+                                  }`}
+                                />
+                                {bank.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 )}
 
                 {/* Account number */}
@@ -383,7 +507,7 @@ const Settings = () => {
                   className="h-12"
                 />
 
-                {/* Phone number — required with bank details */}
+                {/* Phone number */}
                 <div>
                   <Input
                     type="tel"
@@ -407,7 +531,7 @@ const Settings = () => {
                 </div>
               </div>
 
-              {/* Warning if partially filled */}
+              {/* Partial fill warning */}
               {bankFieldsPartiallyFilled && (
                 <div className="flex items-start gap-2 bg-warning/10 rounded-xl p-3">
                   <AlertCircle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
@@ -418,6 +542,7 @@ const Settings = () => {
               )}
             </div>
 
+            {/* ── Save button — bank + phone only ─────────────────────── */}
             <Button
               variant="hero"
               size="lg"
@@ -427,7 +552,7 @@ const Settings = () => {
             >
               {saving
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
-                : "Save Settings"}
+                : "Save Bank Details"}
             </Button>
 
             <div className="pt-4 border-t border-border">
