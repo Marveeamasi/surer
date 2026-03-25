@@ -208,3 +208,30 @@ CREATE INDEX IF NOT EXISTS idx_receipts_dispute_status
 CREATE INDEX IF NOT EXISTS idx_profiles_verification_token
   ON public.profiles (verification_token)
   WHERE verification_token IS NOT NULL;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- MIGRATION: app_logs table
+-- No RLS — you manage access manually.
+-- No DB functions — logger.ts writes directly via the supabase client.
+-- ─────────────────────────────────────────────────────────────────────────────
+ 
+CREATE TABLE IF NOT EXISTS public.app_logs (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  level      TEXT        NOT NULL CHECK (level IN ('info', 'warn', 'error')),
+  context    TEXT        NOT NULL,
+  message    TEXT        NOT NULL,
+  metadata   JSONB       DEFAULT NULL,
+  user_id    UUID        DEFAULT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ 
+-- Indexes for fast filtering and pagination
+CREATE INDEX IF NOT EXISTS idx_app_logs_level   ON public.app_logs (level);
+CREATE INDEX IF NOT EXISTS idx_app_logs_context ON public.app_logs (context);
+CREATE INDEX IF NOT EXISTS idx_app_logs_created ON public.app_logs (created_at DESC);
+ 
+-- Auto-cleanup: run once to set up, keeps table lean (30-day retention)
+-- SELECT cron.schedule('cleanup-app-logs', '0 3 * * *',
+--   $$DELETE FROM public.app_logs WHERE created_at < now() - interval '30 days'$$
+-- );
+ 

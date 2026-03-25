@@ -18,16 +18,17 @@
  * All actions are PIN-protected and use payscrow-release edge function.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Shield, AlertTriangle, Eye, CheckCircle, ArrowRight,
   Loader2, Settings, Percent, RefreshCw, AlertCircle,
-  ExternalLink, Ghost,
+  ExternalLink, Ghost, ScrollText, Trash2,
+  ChevronLeft, ChevronRight, Search, X,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import AppLayout from "@/components/AppLayout";
 import PinVerifyDialog from "@/components/PinVerifyDialog";
@@ -62,6 +63,20 @@ const Admin = () => {
 
   const [loading, setLoading] = useState(true);
 
+  // ── Tab ────────────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"queues" | "logs">("queues");
+
+  // ── Logs ───────────────────────────────────────────────────────────────────
+  const LOGS_PER_PAGE = 20;
+  const [logs,         setLogs]        = useState<any[]>([]);
+  const [logsTotal,    setLogsTotal]   = useState(0);
+  const [logsPage,     setLogsPage]    = useState(1);
+  const [logsLoading,  setLogsLoading] = useState(false);
+  const [logSearch,    setLogSearch]   = useState("");
+  const [logLevel,     setLogLevel]    = useState("all");
+  const [logContext,   setLogContext]  = useState("");
+  const [clearingLogs, setClearingLogs] = useState(false);
+
   // Fee settings
   const [showSettings,   setShowSettings]   = useState(false);
   const [feePercentage,  setFeePercentage]  = useState(String(DEFAULT_FEE_SETTINGS.fee_percentage));
@@ -79,6 +94,43 @@ const Admin = () => {
   const requirePin = (title: string, desc: string, action: () => void) => {
     setPinTitle(title); setPinDesc(desc);
     setPendingAction(() => action); setPinOpen(true);
+  };
+
+  // ── Fetch logs ─────────────────────────────────────────────────────────────
+  const fetchLogs = useCallback(async (page = 1) => {
+    setLogsLoading(true);
+    const from = (page - 1) * LOGS_PER_PAGE;
+    const to   = from + LOGS_PER_PAGE - 1;
+    let q = db
+      .from("app_logs")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+    if (logLevel !== "all") q = q.eq("level", logLevel);
+    if (logContext.trim())  q = q.ilike("context", `%${logContext.trim()}%`);
+    if (logSearch.trim())   q = q.ilike("message", `%${logSearch.trim()}%`);
+    const { data, count } = await q;
+    setLogs(data || []); setLogsTotal(count || 0); setLogsPage(page);
+    setLogsLoading(false);
+  }, [logLevel, logContext, logSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeTab === "logs") fetchLogs(1);
+  }, [activeTab, logLevel, logContext]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeTab !== "logs") return;
+    const t = setTimeout(() => fetchLogs(1), 400);
+    return () => clearTimeout(t);
+  }, [logSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const executeClearLogs = async () => {
+    setClearingLogs(true);
+    const { error } = await db.from("app_logs").delete().lt("created_at", new Date().toISOString());
+    setClearingLogs(false);
+    if (error) { toast.error("Failed to clear logs"); return; }
+    toast.success("All logs cleared.");
+    setLogs([]); setLogsTotal(0); setLogsPage(1);
   };
 
   // ── Admin check ────────────────────────────────────────────────────────────
@@ -310,6 +362,25 @@ const Admin = () => {
             </div>
           </div>
 
+          {/* ── Tab bar ─────────────────────────────────────────────────── */}
+          <div className="flex gap-1 bg-secondary rounded-xl p-1 mb-6">
+            <button onClick={() => setActiveTab("queues")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${activeTab === "queues" ? "bg-card shadow-soft text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <Shield className="w-4 h-4" />
+              Queues
+              {(ghostReceipts.length + pendingBankReceipts.length + receipts.length) > 0 && (
+                <span className="bg-destructive text-destructive-foreground text-xs rounded-full px-1.5 py-0.5 leading-none">
+                  {ghostReceipts.length + pendingBankReceipts.length + receipts.length}
+                </span>
+              )}
+            </button>
+            <button onClick={() => setActiveTab("logs")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${activeTab === "logs" ? "bg-card shadow-soft text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <ScrollText className="w-4 h-4" />
+              Logs
+            </button>
+          </div>
+
           {/* Fee Settings */}
           {showSettings && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
@@ -351,7 +422,7 @@ const Admin = () => {
             </motion.div>
           )}
 
-          {loading ? (
+          {activeTab === "queues" && (loading ? (
             <div className="space-y-3">
               {[1, 2].map((i) => (<div key={i} className="bg-card rounded-2xl p-5 animate-pulse"><div className="h-4 bg-muted rounded w-2/3 mb-3" /><div className="h-3 bg-muted rounded w-1/3" /></div>))}
             </div>
@@ -579,7 +650,135 @@ const Admin = () => {
               </div>
 
             </div>
-          )}
+          ))}
+
+          {/* ════════════════════════════════════════════════════════════
+              LOGS TAB
+          ════════════════════════════════════════════════════════════ */}
+          {activeTab === "logs" && (() => {
+            const totalPages = Math.ceil(logsTotal / LOGS_PER_PAGE);
+            const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(p => p === 1 || p === totalPages || Math.abs(p - logsPage) <= 1)
+              .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                if (i > 0 && (p as number) - (arr[i-1] as number) > 1) acc.push("…");
+                acc.push(p); return acc;
+              }, []);
+            return (
+              <div className="space-y-4">
+                {/* Toolbar */}
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="Search messages..." value={logSearch}
+                      onChange={(e) => setLogSearch(e.target.value)} className="pl-9 h-11" />
+                    {logSearch && (
+                      <button onClick={() => setLogSearch("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Select value={logLevel} onValueChange={setLogLevel}>
+                      <SelectTrigger className="h-10 flex-1 min-w-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All levels</SelectItem>
+                        <SelectItem value="info">Info</SelectItem>
+                        <SelectItem value="warn">Warn</SelectItem>
+                        <SelectItem value="error">Error</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input placeholder="Context..." value={logContext}
+                      onChange={(e) => setLogContext(e.target.value)} className="h-10 flex-1 min-w-0" />
+                    <Button variant="outline" size="icon" className="h-10 w-10 shrink-0"
+                      onClick={() => fetchLogs(logsPage)} disabled={logsLoading}>
+                      <RefreshCw className={`w-4 h-4 ${logsLoading ? "animate-spin" : ""}`} />
+                    </Button>
+                    <Button variant="destructive" size="icon" className="h-10 w-10 shrink-0"
+                      disabled={clearingLogs || logsTotal === 0}
+                      onClick={() => requirePin("Clear All Logs", "Permanently deletes every log. Cannot be undone.", executeClearLogs)}>
+                      {clearingLogs ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                {!logsLoading && (
+                  <p className="text-xs text-muted-foreground">
+                    {logsTotal === 0 ? "No logs found" : `${logsTotal} log${logsTotal !== 1 ? "s" : ""} · page ${logsPage} of ${totalPages}`}
+                  </p>
+                )}
+
+                {logsLoading ? (
+                  <div className="space-y-2">
+                    {[1,2,3,4,5].map(i => (
+                      <div key={i} className="bg-card rounded-xl p-4 animate-pulse">
+                        <div className="h-3 bg-muted rounded w-1/4 mb-2" />
+                        <div className="h-3 bg-muted rounded w-3/4" />
+                      </div>
+                    ))}
+                  </div>
+                ) : logs.length === 0 ? (
+                  <div className="text-center py-16 space-y-3">
+                    <ScrollText className="w-10 h-10 text-muted-foreground mx-auto opacity-30" />
+                    <p className="text-sm text-muted-foreground">No logs match your filters</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {logs.map((log) => {
+                      const isError = log.level === "error";
+                      const isWarn  = log.level === "warn";
+                      const border  = isError ? "border-l-destructive bg-destructive/5" : isWarn ? "border-l-warning bg-warning/5" : "border-l-primary/30";
+                      const badge   = isError ? "bg-destructive/15 text-destructive" : isWarn ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary";
+                      return (
+                        <div key={log.id} className={`bg-card rounded-xl p-4 border border-border border-l-4 ${border}`}>
+                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                            <span className="text-xs font-semibold font-mono bg-secondary text-foreground px-1.5 py-0.5 rounded">{log.context}</span>
+                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${badge}`}>{log.level}</span>
+                            <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                              {new Date(log.created_at).toLocaleString("en-NG", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-foreground break-words">{log.message}</p>
+                          {log.metadata && (
+                            <pre className="mt-2 text-xs text-muted-foreground bg-secondary rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                              {JSON.stringify(log.metadata, null, 2)}
+                            </pre>
+                          )}
+                          {log.user_id && <p className="mt-1 text-xs text-muted-foreground font-mono">uid: {log.user_id}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between pt-2">
+                    <Button variant="outline" size="sm" disabled={logsPage === 1 || logsLoading}
+                      onClick={() => fetchLogs(logsPage - 1)}>
+                      <ChevronLeft className="w-4 h-4" /> Previous
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {pageNumbers.map((p, i) =>
+                        p === "…" ? (
+                          <span key={`e${i}`} className="text-xs text-muted-foreground px-1">…</span>
+                        ) : (
+                          <button key={p} onClick={() => fetchLogs(p as number)}
+                            className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${logsPage === p ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}>
+                            {p}
+                          </button>
+                        )
+                      )}
+                    </div>
+                    <Button variant="outline" size="sm" disabled={logsPage >= totalPages || logsLoading}
+                      onClick={() => fetchLogs(logsPage + 1)}>
+                      Next <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
         </div>
       </div>
 
