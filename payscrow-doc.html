@@ -1,0 +1,2199 @@
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayScrow MarketPlace - Transaction Start API v3.0</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: #fff;
+            padding: 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 4px solid #3498db;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        h2 {
+            color: #2980b9;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-left: 5px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #34495e;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+        }
+        h4 {
+            color: #7f8c8d;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .endpoint-badge {
+            background-color: #27ae60;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            display: inline-block;
+            margin: 20px 0;
+            font-size: 1.1em;
+        }
+        .method-post {
+            background-color: #f39c12;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .method-get {
+            background-color: #3498db;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: #fff;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .code-block {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+        .inline-code {
+            background-color: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #e74c3c;
+            font-size: 0.9em;
+        }
+        .status-200 {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .status-400 {
+            color: #f39c12;
+            font-weight: bold;
+        }
+        .status-401 {
+            color: #e67e22;
+            font-weight: bold;
+        }
+        .status-409 {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .status-422 {
+            color: #c0392b;
+            font-weight: bold;
+        }
+        .status-500 {
+            color: #8e44ad;
+            font-weight: bold;
+        }
+        .alert {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            border-left: 5px solid;
+        }
+        .alert-info {
+            background-color: #d1ecf1;
+            border-color: #0c5460;
+            color: #0c5460;
+        }
+        .alert-warning {
+            background-color: #fff3cd;
+            border-color: #856404;
+            color: #856404;
+        }
+        .alert-success {
+            background-color: #d4edda;
+            border-color: #155724;
+            color: #155724;
+        }
+        .alert-danger {
+            background-color: #f8d7da;
+            border-color: #721c24;
+            color: #721c24;
+        }
+        .required {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .optional {
+            color: #95a5a6;
+            font-style: italic;
+        }
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .header-info {
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .header-info p {
+            margin: 5px 0;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 30px 0;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc ul ul {
+            list-style-type: disc;
+            padding-left: 25px;
+            margin-top: 5px;
+        }
+        .toc li {
+            margin: 10px 0;
+        }
+        .toc ul ul li {
+            margin: 5px 0;
+        }
+        .toc a {
+            color: #2980b9;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PayScrow MarketPlace API Specification</h1>
+        <div class="header-info">
+            <p><strong>API Version:</strong> v3.0</p>
+            <p><strong>Document Version:</strong> 1.1</p>
+            <p><strong>Last Updated:</strong> December 2025</p>
+            <p><strong>Endpoints:</strong> Create Transaction, Calculate Charges, Get Status, Raise Dispute, Apply Escrow Code, Get Supported Banks</p>
+        </div>
+
+        <div class="toc">
+            <h3>Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">1. Overview</a></li>
+                <li><a href="#authentication">2. Authentication</a></li>
+                <li><a href="#endpoint">3. Endpoint Details</a></li>
+                <li><a href="#request">4. Request Specification</a></li>
+                <li><a href="#response">5. Response Specification</a></li>
+                <li><a href="#status-codes">6. HTTP Status Codes</a></li>
+                <li><a href="#validation">7. Validation Rules</a></li>
+                <li><a href="#examples">8. Code Examples</a></li>
+                <li><a href="#errors">9. Error Handling</a></li>
+                <li><a href="#business-logic">10. Business Logic</a></li>
+                <li><a href="#troubleshooting">11. Troubleshooting</a></li>
+                <li><a href="#related-apis">12. Related Broker APIs</a>
+                    <ul>
+                        <li><a href="#get-status">Get Transaction Status</a></li>
+                        <li><a href="#calculate-charges">Calculate Transaction Charges</a></li>
+                        <li><a href="#raise-dispute">Raise Dispute</a></li>
+                        <li><a href="#apply-escrow-code">Apply Escrow Code</a></li>
+                        <li><a href="#get-banks">Get Supported Banks</a></li>
+                    </ul>
+                </li>
+                <li><a href="#webhooks">13. Webhooks</a></li>
+            </ul>
+        </div>
+
+        <h2 id="overview">1. Overview</h2>
+        <p>The MarketPlace Transaction Start API enables brokers to create escrow-protected transactions on behalf of merchants and customers. This endpoint initiates a secure payment flow where funds are held in escrow until transaction conditions are met.</p>
+
+        <h3>Key Features</h3>
+        <ul>
+            <li><strong>Escrow Protection:</strong> Funds are securely held until both parties fulfill their obligations</li>
+            <li><strong>Multi-Currency Support:</strong> Supports NGN, USD, and GBP</li>
+            <li><strong>Automatic Account Creation:</strong> Merchant and customer accounts are created automatically if they don't exist</li>
+            <li><strong>Flexible Charge Allocation:</strong> Configure charge split between merchant and customer (0-100%)</li>
+            <li><strong>Settlement Accounts:</strong> Support for multiple settlement destinations</li>
+            <li><strong>Payment Link Generation:</strong> Automatic generation of customer payment page URL</li>
+        </ul>
+
+        <h3>Use Cases</h3>
+        <ul>
+            <li>E-commerce marketplace transactions</li>
+            <li>Freelance platform payments</li>
+            <li>Real estate deposits</li>
+            <li>Service provider payments</li>
+            <li>Any transaction requiring escrow protection</li>
+        </ul>
+
+        <h2 id="authentication">2. Authentication</h2>
+        <p>All API requests must be authenticated using an API Key provided in the request headers.</p>
+
+        <h3>Authentication Method</h3>
+        <table>
+            <tbody><tr>
+                <th>Header Name</th>
+                <th>Value</th>
+                <th>Required</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">BrokerApiKey</span></td>
+                <td>Your unique API key</td>
+                <td><span class="required">Yes</span></td>
+            </tr>
+        </tbody></table>
+
+        <h3>How to Obtain API Key</h3>
+        <ol>
+            <li>Register as a broker on the PayScrow platform</li>
+            <li>Complete KYC verification</li>
+            <li>Generate API key from your broker dashboard</li>
+            <li>Store your API key securely (never expose in client-side code)</li>
+        </ol>
+
+        <div class="alert alert-warning">
+            <strong>Security Warning:</strong> Never share your API key or commit it to version control. Use environment variables or secure configuration management.
+        </div>
+
+        <h2 id="endpoint">3. Endpoint Details</h2>
+        <div class="endpoint-badge">
+            <span class="method-post">POST</span> /api/v3/marketplace/transactions/start
+        </div>
+
+        <h3>Base URL</h3>
+        <p><span class="inline-code">https://api.payscrow.net</span></p>
+
+        <h3>Full Endpoint URL</h3>
+        <div class="code-block">https://api.payscrow.net/api/v3/marketplace/transactions/start</div>
+
+        <h3>Content Type</h3>
+        <p>All requests must use <span class="inline-code">Content-Type: application/json</span></p>
+
+        <h2 id="request">4. Request Specification</h2>
+
+        <h3>Request Headers</h3>
+        <table>
+            <tbody><tr>
+                <th>Header</th>
+                <th>Value</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">Content-Type</span></td>
+                <td>application/json</td>
+                <td><span class="required">Yes</span></td>
+                <td>Request body format</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">BrokerApiKey</span></td>
+                <td>Your API key</td>
+                <td><span class="required">Yes</span></td>
+                <td>API authentication</td>
+            </tr>
+        </tbody></table>
+
+        <h3>Request Body Parameters</h3>
+        <table>
+            <tbody><tr>
+                <th style="width: 25%">Parameter</th>
+                <th style="width: 15%">Type</th>
+                <th style="width: 15%">Required</th>
+                <th style="width: 45%">Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">transactionReference</span></td>
+                <td>string</td>
+                <td><span class="required">Required</span></td>
+                <td>Unique transaction reference (max 200 characters). Must be unique per broker.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">merchantEmailAddress</span></td>
+                <td>string</td>
+                <td><span class="required">Required</span></td>
+                <td>Merchant's email address. Valid email format required.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">merchantPhoneNo</span></td>
+                <td>string</td>
+                <td><span class="optional">Optional</span></td>
+                <td>Merchant's phone number (max 20 characters).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">merchantName</span></td>
+                <td>string</td>
+                <td><span class="required">Required</span></td>
+                <td>Merchant's name or business name (max 300 characters).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">customerEmailAddress</span></td>
+                <td>string</td>
+                <td><span class="required">Required</span></td>
+                <td>Customer's email address. Valid email format required.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">customerPhoneNo</span></td>
+                <td>string</td>
+                <td><span class="optional">Optional</span></td>
+                <td>Customer's phone number (max 20 characters).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">customerName</span></td>
+                <td>string</td>
+                <td><span class="required">Required</span></td>
+                <td>Customer's full name (max 300 characters).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">currencyCode</span></td>
+                <td>string</td>
+                <td><span class="required">Required</span></td>
+                <td>3-character currency code. Supported: <strong>NGN</strong>, <strong>USD</strong>, <strong>GBP</strong>.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">merchantChargePercentage</span></td>
+                <td>decimal</td>
+                <td><span class="required">Required</span></td>
+                <td>Percentage of escrow charges to be borne by merchant (0-100). Remaining percentage is charged to customer.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">returnUrl</span></td>
+                <td>string</td>
+                <td><span class="optional">Optional</span></td>
+                <td>URL to redirect customer after payment completion. Must be valid absolute URL. If provided, the success page will show "Return to Merchant" button. If not provided (or null), the button will show "Return to Dashboard" and redirect to PayScrow dashboard. Falls back to broker config if not provided.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">responseUrl</span></td>
+                <td>string</td>
+                <td><span class="optional">Optional</span></td>
+                <td>URL for payment gateway response callback. Must be valid absolute URL.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">webhookNotificationUrl</span></td>
+                <td>string</td>
+                <td><span class="optional">Optional</span></td>
+                <td>Webhook URL for transaction status notifications. Must be valid absolute URL. Falls back to broker config if not provided.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">items</span></td>
+                <td>array</td>
+                <td><span class="required">Required</span></td>
+                <td>Array of transaction items. Must contain at least one item. See Items Object below.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">settlementAccounts</span></td>
+                <td>array</td>
+                <td><span class="optional">Optional</span></td>
+                <td>Array of settlement bank accounts for fund disbursement. See Settlement Accounts Object below.</td>
+            </tr>
+        </tbody></table>
+
+        <h3>Items Object</h3>
+        <table>
+            <tbody><tr>
+                <th style="width: 25%">Parameter</th>
+                <th style="width: 15%">Type</th>
+                <th style="width: 15%">Required</th>
+                <th style="width: 45%">Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">name</span></td>
+                <td>string</td>
+                <td><span class="required">Required</span></td>
+                <td>Item name or description (max 300 characters).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">description</span></td>
+                <td>string</td>
+                <td><span class="optional">Optional</span></td>
+                <td>Detailed item description (max 4000 characters).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">quantity</span></td>
+                <td>integer</td>
+                <td><span class="required">Required</span></td>
+                <td>Item quantity. Must be greater than 0.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">price</span></td>
+                <td>decimal</td>
+                <td><span class="required">Required</span></td>
+                <td>Unit price. Must be greater than 0. No negative amounts allowed.</td>
+            </tr>
+        </tbody></table>
+
+        <h3>Settlement Accounts Object</h3>
+        <table>
+            <tbody><tr>
+                <th style="width: 25%">Parameter</th>
+                <th style="width: 15%">Type</th>
+                <th style="width: 15%">Required</th>
+                <th style="width: 45%">Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">bankCode</span></td>
+                <td>string</td>
+                <td><span class="required">Required*</span></td>
+                <td>Bank code (exactly 3 characters). Example: "058" for GTBank.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">accountNumber</span></td>
+                <td>string</td>
+                <td><span class="required">Required*</span></td>
+                <td>Bank account number (exactly 10 digits).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">accountName</span></td>
+                <td>string</td>
+                <td><span class="required">Required*</span></td>
+                <td>Account holder name (max 100 characters).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">amount</span></td>
+                <td>decimal</td>
+                <td><span class="required">Required*</span></td>
+                <td>Amount to settle to this account. Must be greater than 0.</td>
+            </tr>
+        </tbody></table>
+        <p><em>* Required if settlementAccounts array is provided. Total settlement amounts must equal total transaction amount.</em></p>
+
+        <h2 id="response">5. Response Specification</h2>
+
+        <h3>Success Response (HTTP 200)</h3>
+        <div class="code-block">{
+  "success": true,
+  "message": null,
+  "data": {
+    "transactionId": 12345,
+    "transactionNumber": "TXN-2025-001234",
+    "paymentLink": "https://payscrow.net/pay?transId=XYZ789",
+    "totalPayable": 1050000.00,
+    "currencyCode": "NGN",
+    "errors": [],
+    "isSuccessful": true
+  },
+  "errors": null
+}</div>
+
+        <h3>Response Fields</h3>
+        <table>
+            <tbody><tr>
+                <th style="width: 30%">Field</th>
+                <th style="width: 15%">Type</th>
+                <th style="width: 55%">Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">success</span></td>
+                <td>boolean</td>
+                <td>Indicates if the request was successful.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">message</span></td>
+                <td>string</td>
+                <td>Human-readable message. Null on success, error message on failure.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">data.transactionId</span></td>
+                <td>integer</td>
+                <td>Internal database transaction ID. For internal use only.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">data.transactionNumber</span></td>
+                <td>string</td>
+                <td><strong>Use this for all broker operations.</strong> Human-readable transaction number used for tracking and broker API calls.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">data.paymentLink</span></td>
+                <td>string</td>
+                <td>Customer payment page URL. Send this link to customer to complete payment.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">data.totalPayable</span></td>
+                <td>decimal</td>
+                <td>Total amount customer needs to pay (includes items + customer's share of charges).</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">data.currencyCode</span></td>
+                <td>string</td>
+                <td>Currency code for the transaction.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">data.isSuccessful</span></td>
+                <td>boolean</td>
+                <td>Transaction creation success status.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">data.errors</span></td>
+                <td>array</td>
+                <td>Array of error messages. Empty on success.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">errors</span></td>
+                <td>array</td>
+                <td>Top-level error array. Null on success, contains error details on failure.</td>
+            </tr>
+        </tbody></table>
+
+        <h2 id="status-codes">6. HTTP Status Codes</h2>
+        <table>
+            <tbody><tr>
+                <th style="width: 20%">Status Code</th>
+                <th style="width: 30%">Status</th>
+                <th style="width: 50%">Description</th>
+            </tr>
+            <tr>
+                <td class="status-200">200</td>
+                <td class="status-200">OK</td>
+                <td>Transaction created successfully. Payment link generated.</td>
+            </tr>
+            <tr>
+                <td class="status-400">400</td>
+                <td class="status-400">Bad Request</td>
+                <td>Validation errors. Check request parameters. Common causes: missing required fields, invalid email/URL format, field length violations, invalid numeric ranges.</td>
+            </tr>
+            <tr>
+                <td class="status-401">401</td>
+                <td class="status-401">Unauthorized</td>
+                <td>Authentication failed. BrokerApiKey header missing or invalid.</td>
+            </tr>
+            <tr>
+                <td class="status-409">409</td>
+                <td class="status-409">Conflict</td>
+                <td>Transaction reference already exists. Use a unique transaction reference.</td>
+            </tr>
+            <tr>
+                <td class="status-422">422</td>
+                <td class="status-422">Unprocessable Entity</td>
+                <td>Business rule violation. Common causes: invalid currency code, account creation failure, settlement validation errors, charge calculation errors.</td>
+            </tr>
+            <tr>
+                <td class="status-500">500</td>
+                <td class="status-500">Internal Server Error</td>
+                <td>Server error. Contact support if issue persists.</td>
+            </tr>
+        </tbody></table>
+
+        <h2 id="validation">7. Validation Rules</h2>
+
+        <h3>Field-Level Validations</h3>
+        <ul>
+            <li><strong>transactionReference:</strong> Not empty, max 200 characters, must be unique per broker</li>
+            <li><strong>currencyCode:</strong> Exactly 3 characters, must be one of: NGN, USD, GBP</li>
+            <li><strong>Email fields:</strong> Must be valid email format</li>
+            <li><strong>Phone numbers:</strong> Max 20 characters</li>
+            <li><strong>Name fields:</strong> Max 300 characters</li>
+            <li><strong>URLs:</strong> Must be valid absolute URLs (if provided)</li>
+            <li><strong>merchantChargePercentage:</strong> 0 ≤ value ≤ 100</li>
+            <li><strong>Items array:</strong> Must contain at least 1 item</li>
+            <li><strong>Item name:</strong> Max 300 characters</li>
+            <li><strong>Item description:</strong> Max 4000 characters</li>
+            <li><strong>Item quantity:</strong> Must be &gt; 0</li>
+            <li><strong>Item price:</strong> Must be &gt; 0 (no negative amounts)</li>
+            <li><strong>Settlement account number:</strong> Exactly 10 characters</li>
+            <li><strong>Settlement bank code:</strong> Exactly 3 characters</li>
+            <li><strong>Settlement account name:</strong> Max 100 characters</li>
+            <li><strong>Settlement amount:</strong> Must be &gt; 0</li>
+        </ul>
+
+        <h3>Business Rule Validations</h3>
+        <ul>
+            <li><strong>Currency Code:</strong> Must be active and supported in the system</li>
+            <li><strong>Settlement Accounts:</strong> If provided, total settlement amount must equal total transaction amount</li>
+            <li><strong>Settlement Total:</strong> Cannot exceed transaction total</li>
+            <li><strong>Transaction Reference:</strong> Must be unique across all transactions for your broker account</li>
+        </ul>
+
+        <h2 id="examples">8. Code Examples</h2>
+
+        <h3>Example 1: Simple Transaction</h3>
+        <h4>cURL</h4>
+        <div class="code-block">curl -X POST https://api.payscrow.net/api/v3/marketplace/transactions/start \
+  -H "Content-Type: application/json" \
+  -H "BrokerApiKey: your-api-key-here" \
+  -d '{
+    "transactionReference": "TXN-2024-001",
+    "merchantEmailAddress": "merchant@store.com",
+    "merchantPhoneNo": "08012345678",
+    "merchantName": "Best Electronics Store",
+    "customerEmailAddress": "customer@email.com",
+    "customerPhoneNo": "08098765432",
+    "customerName": "John Doe",
+    "currencyCode": "NGN",
+    "merchantChargePercentage": 50,
+    "returnUrl": "https://yourstore.com/payment/return",
+    "items": [
+      {
+        "name": "iPhone 15 Pro",
+        "description": "256GB Space Black",
+        "quantity": 1,
+        "price": 850000.00
+      }
+    ]
+  }'</div>
+
+        <h4>C# (.NET)</h4>
+        <div class="code-block">using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+
+var client = new HttpClient();
+client.DefaultRequestHeaders.Add("BrokerApiKey", "your-api-key-here");
+
+var request = new
+{
+    transactionReference = "TXN-2024-001",
+    merchantEmailAddress = "merchant@store.com",
+    merchantPhoneNo = "08012345678",
+    merchantName = "Best Electronics Store",
+    customerEmailAddress = "customer@email.com",
+    customerPhoneNo = "08098765432",
+    customerName = "John Doe",
+    currencyCode = "NGN",
+    merchantChargePercentage = 50,
+    returnUrl = "https://yourstore.com/payment/return",
+    items = new[]
+    {
+        new
+        {
+            name = "iPhone 15 Pro",
+            description = "256GB Space Black",
+            quantity = 1,
+            price = 850000.00m
+        }
+    }
+};
+
+var json = JsonSerializer.Serialize(request);
+var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+var response = await client.PostAsync(
+    "https://api.payscrow.net/api/v3/marketplace/transactions/start",
+    content
+);
+
+var responseBody = await response.Content.ReadAsStringAsync();
+Console.WriteLine(responseBody);</div>
+
+        <h4>JavaScript (Node.js)</h4>
+        <div class="code-block">const axios = require('axios');
+
+const createTransaction = async () =&gt; {
+  try {
+    const response = await axios.post(
+      'https://api.payscrow.net/api/v3/marketplace/transactions/start',
+      {
+        transactionReference: 'TXN-2024-001',
+        merchantEmailAddress: 'merchant@store.com',
+        merchantPhoneNo: '08012345678',
+        merchantName: 'Best Electronics Store',
+        customerEmailAddress: 'customer@email.com',
+        customerPhoneNo: '08098765432',
+        customerName: 'John Doe',
+        currencyCode: 'NGN',
+        merchantChargePercentage: 50,
+        returnUrl: 'https://yourstore.com/payment/return',
+        items: [
+          {
+            name: 'iPhone 15 Pro',
+            description: '256GB Space Black',
+            quantity: 1,
+            price: 850000.00
+          }
+        ]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'BrokerApiKey': 'your-api-key-here'
+        }
+      }
+    );
+
+    console.log(response.data);
+  } catch (error) {
+    console.error(error.response.data);
+  }
+};
+
+createTransaction();</div>
+
+        <h4>Python</h4>
+        <div class="code-block">import requests
+import json
+
+url = "https://api.payscrow.net/api/v3/marketplace/transactions/start"
+
+headers = {
+    "Content-Type": "application/json",
+    "BrokerApiKey": "your-api-key-here"
+}
+
+payload = {
+    "transactionReference": "TXN-2024-001",
+    "merchantEmailAddress": "merchant@store.com",
+    "merchantPhoneNo": "08012345678",
+    "merchantName": "Best Electronics Store",
+    "customerEmailAddress": "customer@email.com",
+    "customerPhoneNo": "08098765432",
+    "customerName": "John Doe",
+    "currencyCode": "NGN",
+    "merchantChargePercentage": 50,
+    "returnUrl": "https://yourstore.com/payment/return",
+    "items": [
+        {
+            "name": "iPhone 15 Pro",
+            "description": "256GB Space Black",
+            "quantity": 1,
+            "price": 850000.00
+        }
+    ]
+}
+
+response = requests.post(url, headers=headers, data=json.dumps(payload))
+print(response.json())</div>
+
+        <h3>Example 2: Multiple Items with Settlement Accounts</h3>
+        <h4>Request</h4>
+        <div class="code-block">{
+  "transactionReference": "TXN-2024-002",
+  "merchantEmailAddress": "merchant@tech.com",
+  "merchantPhoneNo": "08012345678",
+  "merchantName": "Tech Supplies Ltd",
+  "customerEmailAddress": "buyer@company.com",
+  "customerPhoneNo": "08098765432",
+  "customerName": "Jane Smith",
+  "currencyCode": "NGN",
+  "merchantChargePercentage": 100,
+  "webhookNotificationUrl": "https://yourstore.com/webhook",
+  "items": [
+    {
+      "name": "Laptop",
+      "description": "Dell XPS 15",
+      "quantity": 2,
+      "price": 500000.00
+    },
+    {
+      "name": "Mouse",
+      "quantity": 5,
+      "price": 5000.00
+    }
+  ],
+  "settlementAccounts": [
+    {
+      "bankCode": "058",
+      "accountNumber": "0123456789",
+      "accountName": "Tech Supplies Ltd",
+      "amount": 1000000.00
+    },
+    {
+      "bankCode": "044",
+      "accountNumber": "9876543210",
+      "accountName": "Partner Company",
+      "amount": 25000.00
+    }
+  ]
+}</div>
+
+        <h4>Response</h4>
+        <div class="code-block">{
+  "success": true,
+  "message": null,
+  "data": {
+    "transactionId": 67890,
+    "paymentLink": "https://payscrow.net/pay?transId=ABC456",
+    "totalPayable": 1025000.00,
+    "currencyCode": "NGN",
+    "errors": [],
+    "isSuccessful": true
+  },
+  "errors": null
+}</div>
+
+        <h2 id="errors">9. Error Handling</h2>
+
+        <h3>Error Response Format</h3>
+        <p>All error responses follow a consistent format:</p>
+        <div class="code-block">{
+  "success": false,
+  "message": "Error summary",
+  "data": {
+    "transactionId": 0,
+    "paymentLink": "",
+    "totalPayable": 0,
+    "currencyCode": "",
+    "errors": [
+      "Detailed error message 1",
+      "Detailed error message 2"
+    ],
+    "isSuccessful": false
+  },
+  "errors": [
+    "Error detail 1",
+    "Error detail 2"
+  ]
+}</div>
+
+        <h3>Common Error Scenarios</h3>
+
+        <h4>1. Missing API Key (HTTP 401)</h4>
+        <div class="code-block">{
+  "success": false,
+  "message": "BrokerApiKey header is required",
+  "errors": [
+    "Missing or invalid BrokerApiKey header"
+  ]
+}</div>
+
+        <h4>2. Validation Errors (HTTP 400)</h4>
+        <div class="code-block">{
+  "success": false,
+  "message": "Validation failed",
+  "errors": [
+    "'Transaction Reference' must not be empty.",
+    "currency code has to be 3 characters only!",
+    "must have at least one item to pay for.",
+    "Price must be greater than 0. Negative amounts are not allowed."
+  ]
+}</div>
+
+        <h4>3. Duplicate Transaction (HTTP 409)</h4>
+        <div class="code-block">{
+  "success": false,
+  "message": null,
+  "data": {
+    "transactionId": 0,
+    "paymentLink": "",
+    "totalPayable": 0,
+    "currencyCode": "",
+    "errors": [
+      "Transaction Reference: \"TXN-2024-001\" already exist."
+    ],
+    "isSuccessful": false
+  },
+  "errors": null
+}</div>
+
+        <h4>4. Invalid Currency Code (HTTP 422)</h4>
+        <div class="code-block">{
+  "success": false,
+  "message": null,
+  "data": {
+    "transactionId": 0,
+    "paymentLink": "",
+    "totalPayable": 0,
+    "currencyCode": "",
+    "errors": [
+      "Invalid currency code"
+    ],
+    "isSuccessful": false
+  },
+  "errors": null
+}</div>
+
+        <h4>5. Settlement Validation Error (HTTP 400)</h4>
+        <div class="code-block">{
+  "success": false,
+  "message": "Validation failed",
+  "errors": [
+    "Settlement amount cannot be greater than the amount to be escrowed!"
+  ]
+}</div>
+
+        <h4>6. Server Error (HTTP 500)</h4>
+        <div class="code-block">{
+  "success": false,
+  "message": "An unexpected error occurred",
+  "errors": [
+    "Transaction failed due to server error. Please try again."
+  ]
+}</div>
+
+        <h2 id="business-logic">10. Business Logic</h2>
+
+        <h3>Account Auto-Creation</h3>
+        <p>When a transaction is created:</p>
+        <ul>
+            <li>System checks if merchant account exists (by email)</li>
+            <li>If not found, creates merchant account automatically</li>
+            <li>Same process applies for customer account</li>
+            <li>Account name and phone are updated if account already exists</li>
+        </ul>
+
+        <h3>Transaction Number Generation</h3>
+        <p>Each transaction gets a unique number in format: <span class="inline-code">MKT-{number:D8}</span></p>
+        <p>Example: MKT-00012345</p>
+
+        <h3>Charge Calculation</h3>
+        <p>Escrow charges are calculated based on transaction amount and currency:</p>
+        <ol>
+            <li>Total transaction amount = Sum of (quantity × price) for all items</li>
+            <li>Total escrow charge = Calculated by system based on currency and amount</li>
+            <li>Merchant charge = Total charge × (merchantChargePercentage ÷ 100)</li>
+            <li>Customer charge = Total charge × ((100 - merchantChargePercentage) ÷ 100)</li>
+            <li>Total payable = Transaction amount + Customer charge</li>
+        </ol>
+
+        <div class="alert alert-info">
+            <strong>Example:</strong> If transaction total is ₦1,000,000, escrow charge is ₦15,000, and merchantChargePercentage is 50:<br>
+            • Merchant pays: ₦7,500 (50% of ₦15,000)<br>
+            • Customer pays: ₦1,007,500 (₦1,000,000 + ₦7,500)
+        </div>
+
+        <h3>Payment Link</h3>
+        <p>The payment link directs the customer to a secure payment page where they can:</p>
+        <ul>
+            <li>View transaction details</li>
+            <li>See items being purchased</li>
+            <li>Review total amount to pay</li>
+            <li>Complete payment using available payment methods</li>
+        </ul>
+
+        <h3>Payment Success Redirect Behavior</h3>
+        <p>After successful payment, customers are shown a success page with a return button. The button's behavior is determined by the <span class="inline-code">returnUrl</span> parameter:</p>
+
+        <h4>With returnUrl Provided</h4>
+        <ul>
+            <li>Button displays: <strong>"Return to Merchant"</strong></li>
+            <li>Clicking redirects customer to the provided <span class="inline-code">returnUrl</span></li>
+            <li>Use this to bring customers back to your website/store after payment</li>
+            <li>Example: <span class="inline-code">https://yourstore.com/payment/success</span></li>
+        </ul>
+
+        <h4>Without returnUrl (or null)</h4>
+        <ul>
+            <li>Button displays: <strong>"Return to Dashboard"</strong></li>
+            <li>Clicking redirects customer to PayScrow dashboard (<span class="inline-code">/Dashboard</span>)</li>
+            <li>Useful for internal transactions or when merchant doesn't need custom redirect</li>
+        </ul>
+
+        <div class="alert alert-info">
+            <strong>Best Practice:</strong> Always provide a <span class="inline-code">returnUrl</span> for external merchant transactions to ensure customers return to your website. The URL should be an absolute URL (e.g., <span class="inline-code">https://yourstore.com/order-confirmation</span>) and should be a page that confirms the order and provides next steps to the customer.
+        </div>
+
+        <h3>Settlement Accounts</h3>
+        <p>When settlement accounts are provided:</p>
+        <ul>
+            <li>Funds will be distributed to specified accounts upon transaction completion</li>
+            <li>Total settlement amount must equal total transaction amount</li>
+            <li>Useful for split payments or marketplace scenarios</li>
+            <li>If not provided, full amount goes to merchant's default account</li>
+        </ul>
+
+        <h3>Supported Currencies</h3>
+        <table>
+            <tbody><tr>
+                <th>Currency Code</th>
+                <th>Currency Name</th>
+                <th>Symbol</th>
+                <th>Charge Cap</th>
+            </tr>
+            <tr>
+                <td>NGN</td>
+                <td>Nigerian Naira</td>
+                <td>₦</td>
+                <td>₦1,000.00</td>
+            </tr>
+            <tr>
+                <td>USD</td>
+                <td>US Dollar</td>
+                <td>$</td>
+                <td>$100.00</td>
+            </tr>
+            <tr>
+                <td>GBP</td>
+                <td>British Pound</td>
+                <td>£</td>
+                <td>£100.00</td>
+            </tr>
+        </tbody></table>
+
+        <h2 id="troubleshooting">11. Troubleshooting</h2>
+
+        <h3>Issue: "Invalid currency code" error</h3>
+        <p><strong>Cause:</strong> Currency code is not supported or inactive</p>
+        <p><strong>Solution:</strong></p>
+        <ul>
+            <li>Ensure currency code is exactly 3 characters</li>
+            <li>Use only supported currencies: NGN, USD, GBP</li>
+            <li>Currency codes are case-sensitive - use UPPERCASE</li>
+        </ul>
+
+        <h3>Issue: "Transaction Reference already exist" error</h3>
+        <p><strong>Cause:</strong> Duplicate transaction reference</p>
+        <p><strong>Solution:</strong></p>
+        <ul>
+            <li>Each transaction reference must be unique for your broker account</li>
+            <li>Use a different reference for each transaction</li>
+            <li>Consider using timestamp or UUID in your reference format</li>
+            <li>Example: TXN-{timestamp}-{randomString}</li>
+        </ul>
+
+        <h3>Issue: Settlement validation errors</h3>
+        <p><strong>Cause:</strong> Settlement amounts don't match transaction total</p>
+        <p><strong>Solution:</strong></p>
+        <ul>
+            <li>Sum of all settlement amounts must equal total transaction amount</li>
+            <li>Calculate: Total = Sum of (item.quantity × item.price)</li>
+            <li>Ensure no rounding errors in settlement amounts</li>
+            <li>Each settlement amount must be greater than 0</li>
+        </ul>
+
+        <h3>Issue: "Failed to create merchant/customer account" error</h3>
+        <p><strong>Cause:</strong> Email already registered with conflicting details</p>
+        <p><strong>Solution:</strong></p>
+        <ul>
+            <li>Email might be registered with different phone number</li>
+            <li>Contact PayScrow support to resolve account conflicts</li>
+            <li>Ensure consistent merchant/customer details across transactions</li>
+        </ul>
+
+        <h3>Issue: Unauthorized (401) errors</h3>
+        <p><strong>Cause:</strong> Missing or invalid API key</p>
+        <p><strong>Solution:</strong></p>
+        <ul>
+            <li>Verify BrokerApiKey header is present in request</li>
+            <li>Check API key is correct (no extra spaces)</li>
+            <li>Ensure API key is active and not expired</li>
+            <li>Regenerate API key if necessary</li>
+        </ul>
+
+        <h3>Issue: Validation errors on URLs</h3>
+        <p><strong>Cause:</strong> Invalid URL format</p>
+        <p><strong>Solution:</strong></p>
+        <ul>
+            <li>URLs must be absolute (include protocol: https://)</li>
+            <li>Valid example: https://yoursite.com/callback</li>
+            <li>Invalid example: /callback or yoursite.com/callback</li>
+            <li>URLs are optional - omit if not needed</li>
+        </ul>
+
+        <div class="alert alert-success">
+            <strong>Best Practices:</strong>
+            <ul>
+                <li>Always use HTTPS for all URLs</li>
+                <li>Implement idempotency using unique transaction references</li>
+                <li>Store API responses for reconciliation</li>
+                <li>Implement webhook handlers for real-time updates</li>
+                <li>Monitor API response times and status codes</li>
+                <li>Keep API keys secure and rotate regularly</li>
+            </ul>
+        </div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #ecf0f1;">
+
+        <h2 id="related-apis">Related Broker APIs</h2>
+        <p>In addition to creating transactions, brokers have access to other operations for managing transactions on behalf of their clients.</p>
+
+        <h3 id="get-status">Get Transaction Status</h3>
+        <p>This endpoint returns the current status of a transaction using its transaction number.</p>
+
+        <div class="endpoint-badge">
+            <span class="method-get">GET</span> /api/v3/marketplace/transactions/{transactionNumber}/status
+        </div>
+
+        <h4>Authentication</h4>
+        <p>Uses the same <span class="inline-code">BrokerApiKey</span> header authentication as the transaction creation endpoint.</p>
+
+        <h4>Full Endpoint URL</h4>
+        <div class="code-block">https://api.payscrow.net/api/v3/marketplace/transactions/{transactionNumber}/status</div>
+
+        <h4>URL Parameters</h4>
+        <table>
+            <tbody><tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">transactionNumber</span></td>
+                <td>string</td>
+                <td><span class="required">Yes</span></td>
+                <td>The transaction number returned when the transaction was created using the <span class="inline-code">/start</span> endpoint (e.g., "MKT-00012345").</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Success Response (200 OK)</h4>
+        <div class="code-block">{
+  "success": true,
+  "message": null,
+  "data": {
+    "transactionNumber": "MKT-134345",
+    "status": "In Progress",
+    "inEscrow": true,
+    "inDispute": false,
+    "statusId": 2
+  },
+  "errors": null
+}</div>
+
+        <h4>Response Fields</h4>
+        <table>
+            <tbody><tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">transactionNumber</span></td>
+                <td>string</td>
+                <td>The transaction number (null if not found)</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">status</span></td>
+                <td>string</td>
+                <td>Human-readable status: "Pending", "In Progress", "Completed", "Finalized", or "Terminated"</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">inEscrow</span></td>
+                <td>boolean</td>
+                <td>Whether funds are currently held in escrow</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">inDispute</span></td>
+                <td>boolean</td>
+                <td>Whether the transaction is currently in dispute</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">statusId</span></td>
+                <td>integer</td>
+                <td>Numeric status ID: 1=Pending, 2=In Progress, 3=Completed, 4=Finalized, 5=Terminated</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Transaction Status Values</h4>
+        <table>
+            <tbody><tr>
+                <th>Status ID</th>
+                <th>Status Name</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>Pending</td>
+                <td>Transaction created, awaiting payment</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>In Progress</td>
+                <td>Payment received, funds in escrow</td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>Completed</td>
+                <td>Escrow code applied, ready for release</td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>Finalized</td>
+                <td>Funds released, transaction concluded</td>
+            </tr>
+            <tr>
+                <td>5</td>
+                <td>Terminated</td>
+                <td>Transaction cancelled or refunded</td>
+            </tr>
+        </tbody></table>
+
+        <h4>HTTP Status Codes</h4>
+        <table>
+            <tbody><tr>
+                <th>Code</th>
+                <th>Meaning</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>200</td>
+                <td>OK</td>
+                <td>Transaction found and status returned successfully</td>
+            </tr>
+            <tr>
+                <td>401</td>
+                <td>Unauthorized</td>
+                <td>Invalid or missing BrokerApiKey</td>
+            </tr>
+            <tr>
+                <td>403</td>
+                <td>Forbidden</td>
+                <td>Transaction exists but you are not the broker for this transaction</td>
+            </tr>
+            <tr>
+                <td>404</td>
+                <td>Not Found</td>
+                <td>Transaction with the specified transaction number does not exist</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Error Response Examples</h4>
+
+        <p><strong>404 Not Found - Transaction not found:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "errors": ["Transaction not found"],
+    "errorType": "NotFound"
+}</div>
+
+        <p><strong>403 Forbidden - Not authorized as broker:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "errors": ["You are not authorized as the broker for this transaction"],
+    "errorType": "Forbidden"
+}</div>
+
+        <h4>Integration Notes</h4>
+        <div class="alert alert-info">
+            <p><strong>When to Use This Endpoint:</strong></p>
+            <ul>
+                <li>To poll for transaction status updates (recommended: every 30 seconds)</li>
+                <li>To verify payment status before fulfilling orders</li>
+                <li>To check if a transaction is in dispute before taking action</li>
+                <li>Use the <span class="inline-code">transactionNumber</span> from the <span class="inline-code">/start</span> response</li>
+            </ul>
+        </div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #ecf0f1;">
+
+        <h3 id="calculate-charges">Calculate Transaction Charges</h3>
+        <p>This endpoint allows brokers to calculate transaction charges before creating a transaction. Use this to preview the charge breakdown for your customers.</p>
+
+        <div class="endpoint-badge">
+            <span class="method-get">GET</span> /api/v3/marketplace/charges/calculate
+        </div>
+
+        <h4>Authentication</h4>
+        <p>Uses the same <span class="inline-code">BrokerApiKey</span> header authentication as the transaction creation endpoint.</p>
+
+        <h4>Full Endpoint URL</h4>
+        <div class="code-block">https://api.payscrow.net/api/v3/marketplace/charges/calculate?currencyCode=NGN&amp;amount=100000&amp;merchantChargePercentage=50</div>
+
+        <h4>Query Parameters</h4>
+        <table>
+            <tbody><tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">currencyCode</span></td>
+                <td>string</td>
+                <td><span class="required">Yes</span></td>
+                <td>3-character currency code. Supported: <strong>NGN</strong>, <strong>USD</strong>, <strong>GBP</strong>.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">amount</span></td>
+                <td>decimal</td>
+                <td><span class="required">Yes</span></td>
+                <td>Transaction amount to calculate charges for. Must be greater than 0.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">merchantChargePercentage</span></td>
+                <td>decimal</td>
+                <td><span class="optional">Optional</span></td>
+                <td>Percentage of charge to be paid by merchant (0-100). Default is 0 (customer pays all charges).</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Success Response (200 OK)</h4>
+        <div class="code-block">{
+  "success": true,
+  "message": null,
+  "data": {
+    "amount": 100000.00,
+    "totalCharge": 1600.00,
+    "merchantCharge": 800.00,
+    "customerCharge": 800.00,
+    "grandTotalPayable": 100800.00,
+    "totalSettlementAmount": 99200.00,
+    "currencyCode": "NGN",
+    "currencySymbol": "₦",
+    "isSuccessful": true,
+    "errors": []
+  },
+  "errors": null
+}</div>
+
+        <h4>Response Fields</h4>
+        <table>
+            <tbody><tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">amount</span></td>
+                <td>decimal</td>
+                <td>Original transaction amount provided in the request</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">totalCharge</span></td>
+                <td>decimal</td>
+                <td>Total escrow charge before splitting between merchant and customer</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">merchantCharge</span></td>
+                <td>decimal</td>
+                <td>Portion of charge to be paid by the merchant</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">customerCharge</span></td>
+                <td>decimal</td>
+                <td>Portion of charge to be paid by the customer</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">grandTotalPayable</span></td>
+                <td>decimal</td>
+                <td>Total amount customer will pay (amount + customerCharge)</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">totalSettlementAmount</span></td>
+                <td>decimal</td>
+                <td>Amount to be settled to merchant after deducting merchant's share of charges (amount - merchantCharge)</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">currencyCode</span></td>
+                <td>string</td>
+                <td>Currency code (e.g., "NGN")</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">currencySymbol</span></td>
+                <td>string</td>
+                <td>Currency symbol (e.g., "₦")</td>
+            </tr>
+        </tbody></table>
+
+        <h4>HTTP Status Codes</h4>
+        <table>
+            <tbody><tr>
+                <th>Code</th>
+                <th>Meaning</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>200</td>
+                <td>OK</td>
+                <td>Charges calculated successfully</td>
+            </tr>
+            <tr>
+                <td>400</td>
+                <td>Bad Request</td>
+                <td>Validation error: Invalid currency code, amount &lt;= 0, or merchantChargePercentage outside 0-100 range</td>
+            </tr>
+            <tr>
+                <td>401</td>
+                <td>Unauthorized</td>
+                <td>Invalid or missing BrokerApiKey</td>
+            </tr>
+            <tr>
+                <td>404</td>
+                <td>Not Found</td>
+                <td>Currency not found or not active</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Error Response Examples</h4>
+
+        <p><strong>400 Bad Request - Validation error:</strong></p>
+        <div class="code-block">{
+  "success": false,
+  "message": "Currency code is required",
+  "errors": ["Currency code is required"]
+}</div>
+
+        <p><strong>404 Not Found - Currency not found:</strong></p>
+        <div class="code-block">{
+  "success": false,
+  "message": "Currency 'XYZ' not found or is not active",
+  "errors": ["Currency 'XYZ' not found or is not active"]
+}</div>
+
+        <h4>Code Examples</h4>
+
+        <h5>cURL</h5>
+        <div class="code-block">curl -X GET "https://api.payscrow.net/api/v3/marketplace/charges/calculate?currencyCode=NGN&amp;amount=100000&amp;merchantChargePercentage=50" \
+  -H "BrokerApiKey: your-api-key-here"</div>
+
+        <h5>JavaScript</h5>
+        <div class="code-block">const response = await fetch(
+  'https://api.payscrow.net/api/v3/marketplace/charges/calculate?currencyCode=NGN&amp;amount=100000&amp;merchantChargePercentage=50',
+  {
+    method: 'GET',
+    headers: {
+      'BrokerApiKey': 'your-api-key-here'
+    }
+  }
+);
+
+const result = await response.json();
+console.log('Total charge:', result.data.totalCharge);
+console.log('Customer pays:', result.data.grandTotalPayable);</div>
+
+        <h4>Integration Notes</h4>
+        <div class="alert alert-info">
+            <p><strong>When to Use This Endpoint:</strong></p>
+            <ul>
+                <li>Before creating a transaction, to show customers the exact amount they will pay</li>
+                <li>To display charge breakdowns in your checkout flow</li>
+                <li>To calculate and display fees transparently to merchants and customers</li>
+                <li>Charges are calculated based on broker-specific or global charge configurations</li>
+            </ul>
+        </div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #ecf0f1;">
+
+        <h3 id="raise-dispute">Raise Marketplace Transaction Dispute (Broker)</h3>
+        <p>This endpoint allows brokers to initiate a dispute on a marketplace transaction on behalf of an involved party (merchant or customer).</p>
+
+        <div class="endpoint-badge">
+            <span class="method-post">POST</span> /api/v3/marketplace/transactions/{transactionNumber}/broker/raise-dispute
+        </div>
+
+        <h4>Authentication</h4>
+        <p>Uses the same <span class="inline-code">BrokerApiKey</span> header authentication as the transaction creation endpoint.</p>
+
+        <h4>Full Endpoint URL</h4>
+        <div class="code-block">https://api.payscrow.net/api/v3/marketplace/transactions/{transactionNumber}/broker/raise-dispute</div>
+
+        <h4>URL Parameters</h4>
+        <table>
+            <tbody><tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">transactionNumber</span></td>
+                <td>string</td>
+                <td><span class="required">Yes</span></td>
+                <td>The transaction number returned when the transaction was created using the <span class="inline-code">/start</span> endpoint. This is used for all broker operations.</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Request Body</h4>
+        <table>
+            <tbody><tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">requestedBy</span></td>
+                <td>string</td>
+                <td><span class="required">Yes</span></td>
+                <td>Who is requesting the dispute: <span class="inline-code">"merchant"</span> or <span class="inline-code">"customer"</span>. This determines who initiated the dispute and against whom.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">complaint</span></td>
+                <td>string</td>
+                <td><span class="required">Yes</span></td>
+                <td>Detailed description of the dispute/complaint. Must be between 10-1000 characters.</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Request Example</h4>
+        <div class="code-block">{
+    "requestedBy": "customer",
+    "complaint": "The merchant did not deliver the goods as agreed. I have contacted them multiple times without resolution."
+}</div>
+
+        <h4>Success Response (200 OK)</h4>
+        <div class="code-block">{
+    "success": true,
+    "errors": [],
+    "errorType": null
+}</div>
+
+        <h4>HTTP Status Codes</h4>
+        <table>
+            <tbody><tr>
+                <th>Code</th>
+                <th>Meaning</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>200</td>
+                <td>OK</td>
+                <td>Dispute successfully initiated. The Dispute Resolution module will handle the dispute process.</td>
+            </tr>
+            <tr>
+                <td>400</td>
+                <td>Bad Request</td>
+                <td>Validation error: Missing required fields, invalid requestedBy value, or complaint length violation (10-1000 chars).</td>
+            </tr>
+            <tr>
+                <td>401</td>
+                <td>Unauthorized</td>
+                <td>Invalid or missing BrokerApiKey.</td>
+            </tr>
+            <tr>
+                <td>403</td>
+                <td>Forbidden</td>
+                <td>The broker is not authorized for this transaction.</td>
+            </tr>
+            <tr>
+                <td>404</td>
+                <td>Not Found</td>
+                <td>Transaction not found with the provided ID.</td>
+            </tr>
+            <tr>
+                <td>422</td>
+                <td>Unprocessable Entity</td>
+                <td>Business rule violation: Transaction payment pending, already in dispute, concluded, or not yet in escrow.</td>
+            </tr>
+            <tr>
+                <td>500</td>
+                <td>Internal Server Error</td>
+                <td>An unexpected error occurred during processing.</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Error Response Examples</h4>
+
+        <p><strong>404 Not Found - Transaction not found:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "errors": ["Transaction not found"],
+    "errorType": "NotFound"
+}</div>
+
+        <p><strong>403 Forbidden - Not authorized as broker:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "errors": ["You are not authorized as the broker for this transaction"],
+    "errorType": "Forbidden"
+}</div>
+
+        <p><strong>422 Unprocessable Entity - Business rule violation:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "errors": ["This transaction is already in dispute"],
+    "errorType": "UnprocessableEntity"
+}</div>
+
+        <p><strong>400 Bad Request - Validation error:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "errors": [
+        "RequestedBy must be either 'merchant' or 'customer'",
+        "Complaint must be at least 10 characters"
+    ],
+    "errorType": "Validation"
+}</div>
+
+        <h4>Business Rules</h4>
+        <ul>
+            <li>Only the broker associated with the transaction can raise a dispute via this endpoint</li>
+            <li>The <span class="inline-code">requestedBy</span> field must be either <span class="inline-code">"merchant"</span> or <span class="inline-code">"customer"</span> (case-insensitive)</li>
+            <li>The <span class="inline-code">requestedBy</span> value determines:
+                <ul>
+                    <li>If <span class="inline-code">"merchant"</span>: Dispute is raised BY the merchant AGAINST the customer</li>
+                    <li>If <span class="inline-code">"customer"</span>: Dispute is raised BY the customer AGAINST the merchant</li>
+                </ul>
+            </li>
+            <li>Disputes cannot be raised on transactions that are:
+                <ul>
+                    <li>Payment still pending</li>
+                    <li>Not yet entered escrow (still in pending status)</li>
+                    <li>Already concluded/finalized</li>
+                    <li>Already in dispute</li>
+                </ul>
+            </li>
+            <li>Once initiated, the dispute enters the Dispute Resolution module workflow</li>
+            <li>Use the <span class="inline-code">transactionNumber</span> returned from the <span class="inline-code">/start</span> endpoint for all broker operations (not the internal database ID)</li>
+        </ul>
+
+        <h4>Integration Notes</h4>
+        <div class="alert alert-info">
+            <p><strong>When to Use This Endpoint:</strong></p>
+            <ul>
+                <li>When a merchant or customer contacts you (the broker) with a complaint about a transaction</li>
+                <li>Before the transaction has been released or completed</li>
+                <li>As an alternative to the merchant/customer raising the dispute directly through the platform</li>
+            </ul>
+        </div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #ecf0f1;">
+
+        <h3 id="apply-escrow-code">Apply Escrow Code (Broker)</h3>
+        <p>This endpoint allows brokers to apply an escrow code to release funds from escrow. The escrow code is received via the <a href="#webhooks">Transaction Paid webhook</a> and should be stored securely until the broker is ready to release the funds.</p>
+
+        <div class="endpoint-badge">
+            <span class="method-post">POST</span> /api/v3/escrow/escrowtransactions/applycode
+        </div>
+
+        <h4>Authentication</h4>
+        <p>Uses the same <span class="inline-code">BrokerApiKey</span> header authentication as the transaction creation endpoint.</p>
+
+        <h4>Full Endpoint URL</h4>
+        <div class="code-block">https://api.payscrow.net/api/v3/escrow/escrowtransactions/applycode</div>
+
+        <h4>Request Body</h4>
+        <table>
+            <tbody><tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">transactionId</span></td>
+                <td>string (GUID)</td>
+                <td><span class="required">Yes</span></td>
+                <td>The transaction GUID. Use the <span class="inline-code">transactionId</span> field from the <a href="#webhooks">webhook payload</a> or from the <span class="inline-code">/start</span> response.</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">code</span></td>
+                <td>string</td>
+                <td><span class="required">Yes</span></td>
+                <td>The escrow code received in the webhook payload's <span class="inline-code">escrowCode</span> field. Maximum 10 characters.</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Request Example</h4>
+        <div class="code-block">{
+    "transactionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "code": "ABC123"
+}</div>
+
+        <h4>Success Response (200 OK)</h4>
+        <div class="code-block">{
+    "success": true,
+    "message": "Escrow Code applied successfully!",
+    "errors": []
+}</div>
+
+        <h4>HTTP Status Codes</h4>
+        <table>
+            <tbody><tr>
+                <th>Code</th>
+                <th>Meaning</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>200</td>
+                <td>OK</td>
+                <td>Escrow code applied successfully. Transaction status changes to "PendingSettlement" and funds will be released.</td>
+            </tr>
+            <tr>
+                <td>400</td>
+                <td>Bad Request</td>
+                <td>Validation error: Missing or invalid fields, or a business rule violation (see error examples below).</td>
+            </tr>
+            <tr>
+                <td>401</td>
+                <td>Unauthorized</td>
+                <td>Invalid or missing BrokerApiKey.</td>
+            </tr>
+            <tr>
+                <td>500</td>
+                <td>Internal Server Error</td>
+                <td>An unexpected error occurred during processing.</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Error Response Examples</h4>
+
+        <p><strong>400 Bad Request - Transaction not found or not authorized:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "message": "",
+    "errors": ["Transaction not found or you are not authorized as broker!"]
+}</div>
+
+        <p><strong>400 Bad Request - Already released:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "message": "",
+    "errors": ["Escrow code already applied for this transaction"]
+}</div>
+
+        <p><strong>400 Bad Request - Transaction in dispute:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "message": "",
+    "errors": ["You cannot apply an escrow code to a transaction that is in dispute!"]
+}</div>
+
+        <p><strong>400 Bad Request - Invalid escrow code:</strong></p>
+        <div class="code-block">{
+    "success": false,
+    "message": "",
+    "errors": ["Invalid code. Please ensure you have entered the correct code!"]
+}</div>
+
+        <h4>Business Rules</h4>
+        <ul>
+            <li>The broker must be associated with the transaction (verified via escrow account role)</li>
+            <li>The transaction must not have been previously released</li>
+            <li>The transaction must not be currently in dispute</li>
+            <li>The escrow code is validated case-insensitively against the stored code</li>
+            <li>On success, the escrow status changes to <span class="inline-code">PendingSettlement</span> and the transaction is marked as released</li>
+            <li>The MarketPlace transaction automatically updates to <span class="inline-code">Completed</span> and <span class="inline-code">InEscrow</span> becomes <span class="inline-code">false</span></li>
+        </ul>
+
+        <h4>Code Examples</h4>
+
+        <h5>cURL</h5>
+        <div class="code-block">curl -X POST "https://api.payscrow.net/api/v3/escrow/escrowtransactions/applycode" \
+  -H "BrokerApiKey: your-api-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transactionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "code": "ABC123"
+  }'</div>
+
+        <h5>JavaScript</h5>
+        <div class="code-block">const response = await fetch(
+  'https://api.payscrow.net/api/v3/escrow/escrowtransactions/applycode',
+  {
+    method: 'POST',
+    headers: {
+      'BrokerApiKey': 'your-api-key-here',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      transactionId: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+      code: 'ABC123'
+    })
+  }
+);
+
+const result = await response.json();
+
+if (result.success) {
+  console.log('Escrow released:', result.message);
+} else {
+  console.error('Failed:', result.errors);
+}</div>
+
+        <h5>C# (HttpClient)</h5>
+        <div class="code-block">using var client = new HttpClient();
+client.DefaultRequestHeaders.Add("BrokerApiKey", "your-api-key-here");
+
+var payload = new
+{
+    transactionId = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    code = "ABC123"
+};
+
+var response = await client.PostAsJsonAsync(
+    "https://api.payscrow.net/api/v3/escrow/escrowtransactions/applycode",
+    payload
+);
+
+var result = await response.Content.ReadFromJsonAsync&lt;ApplyCodeResult&gt;();
+
+if (result.Success)
+    Console.WriteLine($"Escrow released: {result.Message}");
+else
+    Console.WriteLine($"Errors: {string.Join(", ", result.Errors)}");</div>
+
+        <h4>Integration Notes</h4>
+        <div class="alert alert-info">
+            <p><strong>When to Use This Endpoint:</strong></p>
+            <ul>
+                <li>After receiving the <a href="#webhooks">Transaction Paid webhook</a> which contains the <span class="inline-code">escrowCode</span></li>
+                <li>When the broker has verified that the merchant has fulfilled their obligations (e.g., goods delivered, service completed)</li>
+                <li>Use the <span class="inline-code">transactionId</span> (GUID) from the webhook payload, not the <span class="inline-code">transactionNumber</span></li>
+            </ul>
+            <p><strong>Typical Flow:</strong></p>
+            <ol>
+                <li>Create transaction via <span class="inline-code">/start</span> endpoint</li>
+                <li>Customer pays — you receive a <strong>Transaction Paid</strong> webhook containing the <span class="inline-code">escrowCode</span></li>
+                <li>Store the <span class="inline-code">escrowCode</span> and <span class="inline-code">transactionId</span> securely</li>
+                <li>When ready to release funds, call this endpoint with the stored values</li>
+                <li>Funds move to <span class="inline-code">PendingSettlement</span> and are disbursed to the merchant</li>
+            </ol>
+        </div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #ecf0f1;">
+
+        <h3 id="get-banks">Get Supported Banks</h3>
+        <p>This endpoint returns a list of all Nigerian banks supported by PayScrow for settlement purposes.</p>
+
+        <div class="endpoint-badge">
+            <span class="method-get">GET</span> /api/v3/payments/banks/broker/supported-banks
+        </div>
+
+        <h4>Authentication</h4>
+        <p>Uses the same <span class="inline-code">BrokerApiKey</span> header authentication as the transaction creation endpoint.</p>
+
+        <h4>Full Endpoint URL</h4>
+        <div class="code-block">https://api.payscrow.net/api/v3/payments/banks/broker/supported-banks</div>
+
+        <h4>Request</h4>
+        <p>This endpoint does not require any parameters. Simply make a GET request with your broker API key in the header.</p>
+
+        <h4>Success Response (200 OK)</h4>
+        <div class="code-block">{
+  "success": true,
+  "message": null,
+  "data": {
+    "banks": [
+      {
+        "id": 1,
+        "name": "Access Bank",
+        "code": "044",
+        "country": "NG"
+      },
+      {
+        "id": 2,
+        "name": "Guaranty Trust Bank",
+        "code": "058",
+        "country": "NG"
+      },
+      {
+        "id": 3,
+        "name": "United Bank for Africa",
+        "code": "033",
+        "country": "NG"
+      },
+      {
+        "id": 4,
+        "name": "Zenith Bank",
+        "code": "057",
+        "country": "NG"
+      }
+    ]
+  },
+  "errors": null
+}</div>
+
+        <h4>Response Fields</h4>
+        <table>
+            <tbody><tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">banks</span></td>
+                <td>array</td>
+                <td>List of all supported Nigerian banks</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">banks[].id</span></td>
+                <td>integer</td>
+                <td>Internal bank ID</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">banks[].name</span></td>
+                <td>string</td>
+                <td>Full name of the bank</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">banks[].code</span></td>
+                <td>string</td>
+                <td>Bank code (CBN code) - Use this when specifying settlement accounts</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">banks[].country</span></td>
+                <td>string</td>
+                <td>Country code (always "NG" for Nigeria)</td>
+            </tr>
+        </tbody></table>
+
+        <h4>HTTP Status Codes</h4>
+        <table>
+            <tbody><tr>
+                <th>Code</th>
+                <th>Meaning</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>200</td>
+                <td>OK</td>
+                <td>Successfully retrieved the list of supported banks</td>
+            </tr>
+            <tr>
+                <td>401</td>
+                <td>Unauthorized</td>
+                <td>Invalid or missing BrokerApiKey</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Integration Notes</h4>
+        <div class="alert alert-info">
+            <p><strong>When to Use This Endpoint:</strong></p>
+            <ul>
+                <li>Before collecting settlement account information from merchants</li>
+                <li>To validate bank codes when creating transactions with settlement accounts</li>
+                <li>To display a dropdown/selection list of supported banks in your UI</li>
+                <li>The bank <span class="inline-code">code</span> field should be used in the <span class="inline-code">settlementAccounts[].bankCode</span> when creating transactions</li>
+            </ul>
+        </div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #ecf0f1;">
+
+        <h2 id="webhooks">Webhooks</h2>
+        <p>PayScrow sends webhook notifications to your specified endpoint to keep you informed about transaction events in real-time.</p>
+
+        <h3>Webhook Setup</h3>
+        <p>To receive webhook notifications, include the <span class="inline-code">webhookNotificationUrl</span> parameter when creating a transaction via the <span class="inline-code">/start</span> endpoint. PayScrow will send HTTP POST requests to this URL when specific events occur.</p>
+
+        <div class="alert alert-info">
+            <p><strong>Important:</strong></p>
+            <ul>
+                <li>Your webhook endpoint must accept POST requests</li>
+                <li>The endpoint should return a 2xx status code to indicate successful receipt</li>
+                <li>PayScrow will retry failed webhook deliveries with exponential backoff</li>
+                <li>Ensure your endpoint can handle the webhook payload format described below</li>
+            </ul>
+        </div>
+
+        <h3>Transaction Paid Webhook</h3>
+        <p>This webhook is triggered when a customer successfully completes payment for a transaction.</p>
+
+        <h4>Event Trigger</h4>
+        <p>Sent when: Customer payment is verified and the transaction enters escrow status.</p>
+
+        <h4>HTTP Method</h4>
+        <div class="code-block">POST</div>
+
+        <h4>Headers</h4>
+        <table>
+            <tbody><tr>
+                <th>Header</th>
+                <th>Value</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">Content-Type</span></td>
+                <td>application/json</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Webhook Payload</h4>
+        <div class="code-block">{
+  "transactionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "transactionNumber": "TXN-2025-001234",
+  "escrowCode": "ABC123",
+  "externalReference": "YOUR-REF-12345",
+  "paymentStatus": "Paid",
+  "escrowStatus": "InEscrow",
+  "amountPaid": "1050000.00",
+  "currency": "NGN",
+  "status": "InProgress",
+  "paymentDate": "2025-12-07T14:30:00Z",
+  "timestamp": "2025-12-07T14:30:05Z"
+}</div>
+
+        <h4>Payload Fields</h4>
+        <table>
+            <tbody><tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="inline-code">transactionId</span></td>
+                <td>string (GUID)</td>
+                <td>Unique transaction identifier (GUID format)</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">transactionNumber</span></td>
+                <td>string</td>
+                <td>Human-readable transaction number for tracking</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">escrowCode</span></td>
+                <td>string</td>
+                <td>6-character code for releasing funds from escrow. <strong>Store this securely!</strong></td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">externalReference</span></td>
+                <td>string</td>
+                <td>Your original transaction reference from the <span class="inline-code">/start</span> request</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">paymentStatus</span></td>
+                <td>string</td>
+                <td>Payment status - will be "Paid" for this webhook</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">escrowStatus</span></td>
+                <td>string</td>
+                <td>Escrow status - will be "InEscrow" indicating funds are held</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">amountPaid</span></td>
+                <td>string</td>
+                <td>Total amount paid including all charges (formatted as decimal string)</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">currency</span></td>
+                <td>string</td>
+                <td>Currency code (e.g., "NGN")</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">status</span></td>
+                <td>string</td>
+                <td>Transaction status - will be "InProgress" after payment</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">paymentDate</span></td>
+                <td>string (ISO 8601)</td>
+                <td>Date and time when payment was completed</td>
+            </tr>
+            <tr>
+                <td><span class="inline-code">timestamp</span></td>
+                <td>string (ISO 8601)</td>
+                <td>Date and time when webhook was generated</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Webhook Response</h4>
+        <p>Your endpoint should respond with a 2xx HTTP status code to acknowledge receipt of the webhook. Any other status code will be considered a failure and PayScrow will retry delivery.</p>
+
+        <div class="code-block">HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "received": true
+}</div>
+
+        <h4>Retry Policy</h4>
+        <table>
+            <tbody><tr>
+                <th>Attempt</th>
+                <th>Delay</th>
+            </tr>
+            <tr>
+                <td>1st retry</td>
+                <td>30 seconds</td>
+            </tr>
+            <tr>
+                <td>2nd retry</td>
+                <td>5 minutes</td>
+            </tr>
+            <tr>
+                <td>3rd retry</td>
+                <td>1 hour</td>
+            </tr>
+        </tbody></table>
+
+        <h4>Security Considerations</h4>
+        <div class="alert alert-warning">
+            <p><strong>Important Security Notes:</strong></p>
+            <ul>
+                <li><strong>Validate the source:</strong> Ensure webhook requests are coming from PayScrow's servers (check IP whitelisting if available)</li>
+                <li><strong>Idempotency:</strong> Your endpoint should handle duplicate webhooks gracefully. Use <span class="inline-code">transactionId</span> or <span class="inline-code">transactionNumber</span> to detect duplicates</li>
+                <li><strong>Secure storage:</strong> Store the <span class="inline-code">escrowCode</span> securely - it's required to release funds from escrow</li>
+                <li><strong>Verify transactions:</strong> Cross-reference webhook data with your records using <span class="inline-code">externalReference</span></li>
+                <li><strong>HTTPS required:</strong> Your webhook URL must use HTTPS in production</li>
+            </ul>
+        </div>
+
+        <h4>Example Implementation (Node.js/Express)</h4>
+        <div class="code-block">const express = require('express');
+const app = express();
+
+app.use(express.json());
+
+app.post('/webhooks/payscrow/transaction-paid', async (req, res) =&gt; {
+  try {
+    const payload = req.body;
+
+    // Log webhook receipt
+    console.log('Received PayScrow webhook:', payload);
+
+    // Check for duplicate (idempotency)
+    const existingRecord = await db.findTransaction(payload.transactionNumber);
+    if (existingRecord &amp;&amp; existingRecord.webhookProcessed) {
+      console.log('Duplicate webhook, already processed');
+      return res.status(200).json({ received: true, duplicate: true });
+    }
+
+    // Verify transaction matches your records
+    const transaction = await db.findByReference(payload.externalReference);
+    if (!transaction) {
+      console.error('Transaction not found:', payload.externalReference);
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Update transaction status
+    await db.updateTransaction(transaction.id, {
+      status: 'paid',
+      escrowCode: payload.escrowCode,
+      paymentDate: payload.paymentDate,
+      webhookProcessed: true
+    });
+
+    // Trigger your business logic (send confirmation email, update inventory, etc.)
+    await handleTransactionPaid(transaction, payload);
+
+    // Acknowledge receipt
+    res.status(200).json({ received: true });
+
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});</div>
+
+        <h4>Testing Webhooks</h4>
+        <div class="alert alert-info">
+            <p><strong>Testing Tips:</strong></p>
+            <ul>
+                <li>Use tools like <a href="https://webhook.site" target="_blank">webhook.site</a> or <a href="https://ngrok.com" target="_blank">ngrok</a> to test webhook delivery during development</li>
+                <li>Test your endpoint's handling of duplicate webhooks</li>
+                <li>Verify your endpoint responds within a reasonable timeout (recommended: under 5 seconds)</li>
+                <li>Test failure scenarios and ensure your endpoint returns appropriate status codes</li>
+            </ul>
+        </div>
+
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #7f8c8d; font-size: 0.9em;">
+            <p>© 2025 PayScrow. All rights reserved.</p>
+            <p>Document Version: 1.1 | Last Updated: December 2025</p>
+        </div>
+    </div>
+
+</body></html>
